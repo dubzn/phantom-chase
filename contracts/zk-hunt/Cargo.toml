@@ -1,0 +1,17 @@
+[package]
+name = "zk-hunt"
+description = "ZK Hunt Lite v2 - Asymmetric PvP fog-of-war game"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+doctest = false
+
+[dependencies]
+soroban-sdk = "23.1.0"
+
+[dev-dependencies]
+soroban-sdk = { version = "23.1.0", features = ["testutils"] }

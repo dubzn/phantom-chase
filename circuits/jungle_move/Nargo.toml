@@ -1,0 +1,6 @@
+[package]
+name = "jungle_move"
+type = "bin"
+authors = ["Stellar Game Studio"]
+
+[dependencies]

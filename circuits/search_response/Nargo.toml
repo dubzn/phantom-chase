@@ -1,0 +1,6 @@
+[package]
+name = "search_response"
+type = "bin"
+authors = ["Stellar Game Studio"]
+
+[dependencies]

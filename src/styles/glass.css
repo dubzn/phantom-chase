@@ -1,0 +1,121 @@
+/* === Phantom Chase — Glass Design System === */
+
+:root {
+  /* Background — darker, less purple */
+  --bg-primary: #000000;
+  --bg-secondary: #1c1c1e;
+
+  /* Glass — subtle, iOS-like vibrancy */
+  --glass-bg: rgba(255, 255, 255, 0.05);
+  --glass-bg-hover: rgba(255, 255, 255, 0.08);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-border-hover: rgba(255, 255, 255, 0.15);
+  --glass-blur: 20px;
+  --glass-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+
+  /* Text */
+  --text-primary: rgba(255, 255, 255, 0.85);
+  --text-secondary: rgba(255, 255, 255, 0.55);
+  --text-muted: rgba(255, 255, 255, 0.3);
+
+  /* Game accents — softer, iOS-like */
+  --color-hunter: #ff6961;
+  --color-prey: #64d2ff;
+  --color-searched: #ffd60a;
+  --color-valid: rgba(255, 255, 255, 0.6);
+  --color-plains: #c4a882;
+  --color-jungle: #1a4d1a;
+
+  /* Button variants — lower opacity tints */
+  --btn-primary-bg: rgba(100, 210, 255, 0.12);
+  --btn-primary-border: rgba(100, 210, 255, 0.25);
+  --btn-primary-text: #64d2ff;
+  --btn-danger-bg: rgba(255, 105, 97, 0.12);
+  --btn-danger-border: rgba(255, 105, 97, 0.25);
+  --btn-danger-text: #ff6961;
+  --btn-secondary-bg: rgba(255, 255, 255, 0.06);
+  --btn-secondary-border: rgba(255, 255, 255, 0.15);
+  --btn-secondary-text: rgba(255, 255, 255, 0.8);
+
+  /* Sizing */
+  --topbar-height: 0px;
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 22px;
+}
+
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  color: var(--text-primary);
+  background: linear-gradient(180deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar styling for any overflow areas */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+}
+
+/* Glass input base */
+.glass-input {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  padding: 13px 18px;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s, background 0.2s;
+}
+.glass-input:focus {
+  border-color: var(--btn-primary-border);
+  background: rgba(255, 255, 255, 0.1);
+}
+.glass-input::placeholder {
+  color: var(--text-muted);
+}
+
+/* Keyframes */
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+@keyframes round-banner-in {
+  0% { opacity: 0; transform: translateX(-50%) scale(0.85); }
+  100% { opacity: 1; transform: translateX(-50%) scale(1); }
+}
+
+@keyframes round-banner-out {
+  0% { opacity: 1; transform: translateX(-50%) scale(1); }
+  100% { opacity: 0; transform: translateX(-50%) scale(0.9); }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--text-muted);
+  border-top-color: var(--color-prey);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  display: inline-block;
+  vertical-align: middle;
+}
