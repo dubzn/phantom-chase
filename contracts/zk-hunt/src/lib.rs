@@ -25,7 +25,7 @@ mod ultrahonk_contract {
     soroban_sdk::contractimport!(file = "ultrahonk_soroban_contract.wasm");
 }
 
-pub const ULTRAHONK_CONTRACT_ADDRESS: &str = "CA7JSGDGNDG7BWZAKOMCC5V5JZ3XXSHWXLDMOH7VVIU6HEDTJ7VHFAHM";
+pub const ULTRAHONK_CONTRACT_ADDRESS: &str = "CA7M4BSZHHBVGGOVZNG7S7AD4HEWMRKWF55DFTAFXPWAP5BI7D6QX5KU";
 
 // ============================================================================
 // Constants

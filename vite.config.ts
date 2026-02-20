@@ -22,6 +22,7 @@ export default defineConfig(() => {
       target: "esnext",
     },
     optimizeDeps: {
+      include: ["use-sync-external-store/shim/with-selector.js"],
       exclude: [
         "@stellar/stellar-xdr-json",
         "@noir-lang/noir_wasm",

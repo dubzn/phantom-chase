@@ -35,6 +35,7 @@
     "react-router-dom": "^7.9.3",
     "three": "^0.182.0",
     "urijs": "^1.19.11",
+    "use-sync-external-store": "^1.6.0",
     "zod": "^4.1.11"
   },
   "devDependencies": {

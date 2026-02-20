@@ -161,11 +161,11 @@ ultrahonk-soroban-contract   (ZK verifier, pre-compiled WASM)
 ### Deploy
 
 ```bash
-# 1. Start the local Stellar network (wait ~30s)
+# 1. Start the local Stellar network (wait ~30s) (need docker running)
 stellar container start local --limits unlimited
 
 # 2. Install JS dependencies
-bun install
+npm install
 
 # 3. Run the full deploy pipeline
 ./deploy.sh
