@@ -7,8 +7,11 @@ import {
   GRID_SIZE,
   MAPS,
   isJungle,
+  isPlains,
   isInBounds,
   isAdjacent,
+  canHunterSearch,
+  canPreyDash,
   generateRandomNonce,
   type PreySecret,
 } from '../services/GameService';
@@ -17,6 +20,7 @@ import { GameHUD } from './GameHUD';
 import { GameControls } from './GameControls';
 import { WalletButton } from './WalletButton';
 import { TileContextMenu } from './TileContextMenu';
+import { HowToPlay } from './HowToPlay';
 
 // --- Prey secret persistence helpers ---
 const PREY_SECRET_KEY_PREFIX = 'zk-hunt-prey-';
@@ -68,11 +72,13 @@ export const GameView: React.FC<GameViewProps> = ({ sessionId, isHunter: initial
   const [contextMenu, setContextMenu] = useState<{
     screenX: number; screenY: number;
     tileX: number; tileY: number;
-    canMove: boolean; canSearch: boolean;
+    canMove: boolean; canSearch: boolean; canPowerSearch: boolean;
   } | null>(null);
   const [walletDisconnected, setWalletDisconnected] = useState(false);
   const [roundBanner, setRoundBanner] = useState<{ text: string; color: string; fading: boolean } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [gameOverCountdown, setGameOverCountdown] = useState<number | null>(null);
+  const [showHowToPlay, setShowHowToPlay] = useState(false);
   const hadAddressRef = useRef(false);
   const gameServiceRef = useRef(new GameService());
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -220,8 +226,18 @@ export const GameView: React.FC<GameViewProps> = ({ sessionId, isHunter: initial
   useEffect(() => {
     if (game?.phase === GamePhase.Ended) {
       clearPreySecret(sessionId);
+      // Start 8-second countdown then return to lobby
+      setGameOverCountdown(8);
     }
   }, [game?.phase, sessionId]);
+
+  // Countdown timer: tick every second, then call onBack
+  useEffect(() => {
+    if (gameOverCountdown === null) return;
+    if (gameOverCountdown <= 0) { onBack(); return; }
+    const t = setTimeout(() => setGameOverCountdown((c) => (c ?? 1) - 1), 1000);
+    return () => clearTimeout(t);
+  }, [gameOverCountdown, onBack]);
 
   // Auto-respond to search when prey enters SearchPending phase
   const autoRespondTriggered = useRef(false);
@@ -234,6 +250,18 @@ export const GameView: React.FC<GameViewProps> = ({ sessionId, isHunter: initial
     autoRespondTriggered.current = true;
     void handleRespondSearch();
   }, [game?.phase, isHunter, preySecret, isActing]);
+
+  // Auto-pass turn when prey is frozen
+  const autoPassFrozenTriggered = useRef(false);
+  useEffect(() => {
+    if (!game || isHunter || game.phase !== GamePhase.PreyTurn || !game.prey_is_frozen || isActing) {
+      autoPassFrozenTriggered.current = false;
+      return;
+    }
+    if (autoPassFrozenTriggered.current) return;
+    autoPassFrozenTriggered.current = true;
+    void handlePassFrozen();
+  }, [game?.phase, game?.prey_is_frozen, isHunter, isActing]);
 
   const isMyTurn = game && !walletDisconnected && (
     (game.phase === GamePhase.HunterTurn && isHunter) ||
@@ -274,9 +302,19 @@ export const GameView: React.FC<GameViewProps> = ({ sessionId, isHunter: initial
     if (!isHunter && game.phase === GamePhase.PreyTurn && preySecret) {
       const preyPos = { x: preySecret.x, y: preySecret.y };
       const targetPos = { x, y };
+      const dist = Math.abs(x - preyPos.x) + Math.abs(y - preyPos.y);
 
-      if (!isAdjacent(preyPos, targetPos) || !isInBounds(x, y)) {
-        setStatus('Invalid move: must be adjacent');
+      if (dist === 0 || !isInBounds(x, y)) {
+        setStatus('Invalid move');
+        return;
+      }
+
+      // Validate: adjacent move or dash (distance 2, plains-only, dashes available)
+      const isDash = dist === 2 && isPlains(currentMap, x, y) && !game.prey_is_hidden && game.prey_dash_remaining > 0;
+      const isAdjacentMove = dist === 1;
+
+      if (!isDash && !isAdjacentMove) {
+        setStatus('Invalid move: too far');
         return;
       }
 
@@ -284,7 +322,13 @@ export const GameView: React.FC<GameViewProps> = ({ sessionId, isHunter: initial
       const mapId = game.map_index;
 
       try {
-        if (game.prey_is_hidden) {
+        if (isDash) {
+          setStatus('Dashing...');
+          const tx = await client.prey_dash_public({ session_id: sessionId, x, y });
+          await tx.signAndSend({ signTransaction: walletSignTransaction });
+          const newNonce = generateRandomNonce();
+          setPreySecret({ x, y, nonce: newNonce });
+        } else if (game.prey_is_hidden) {
           if (isJungle(currentMap, x, y)) {
             setStatus('Generating ZK proof for jungle move (30-60s)...');
             const newNonce = generateRandomNonce();
@@ -375,6 +419,42 @@ export const GameView: React.FC<GameViewProps> = ({ sessionId, isHunter: initial
     }
   };
 
+  const handleEMP = async () => {
+    if (!address || !game || !isHunter || game.phase !== GamePhase.HunterTurn || isActing) return;
+    const client = createZkHuntClient();
+    client.options.publicKey = address;
+    setIsActing(true);
+    setStatus('Firing EMP...');
+    try {
+      const tx = await client.hunter_emp({ session_id: sessionId });
+      await tx.signAndSend({ signTransaction: walletSignTransaction });
+      setStatus('EMP fired! Prey is frozen for 1 turn.');
+      await pollGame();
+    } catch (err: any) {
+      setStatus(`Error: ${err.message}`);
+    } finally {
+      setIsActing(false);
+    }
+  };
+
+  const handlePassFrozen = async () => {
+    if (!address || !game || isHunter || game.phase !== GamePhase.PreyTurn || isActing) return;
+    const client = createZkHuntClient();
+    client.options.publicKey = address;
+    setIsActing(true);
+    setStatus('You are frozen! Skipping turn...');
+    try {
+      const tx = await client.prey_pass_frozen({ session_id: sessionId });
+      await tx.signAndSend({ signTransaction: walletSignTransaction });
+      setStatus('');
+      await pollGame();
+    } catch (err: any) {
+      setStatus(`Error: ${err.message}`);
+    } finally {
+      setIsActing(false);
+    }
+  };
+
   const handleRespondSearch = async () => {
     if (!address || !game || isHunter || game.phase !== GamePhase.SearchPending || !preySecret || isActing) return;
     const client = createZkHuntClient();
@@ -448,17 +528,32 @@ export const GameView: React.FC<GameViewProps> = ({ sessionId, isHunter: initial
         const ny = pos.y + dy;
         if (isInBounds(nx, ny)) moves.add(`${nx},${ny}`);
       }
-    } else if (!isHunter && game.phase === GamePhase.PreyTurn && preySecret) {
+    } else if (!isHunter && game.phase === GamePhase.PreyTurn && preySecret && !game.prey_is_frozen) {
       const pos = { x: preySecret.x, y: preySecret.y };
+      // Adjacent moves (distance 1)
       const offsets = [[-1, 0], [1, 0], [0, -1], [0, 1], [0, 0]];
       for (const [dx, dy] of offsets) {
         const nx = pos.x + dx;
         const ny = pos.y + dy;
         if (isInBounds(nx, ny)) moves.add(`${nx},${ny}`);
       }
+      // Dash moves (distance 2, plains only, prey not hidden, dashes available)
+      if (!game.prey_is_hidden && game.prey_dash_remaining > 0) {
+        for (let dx = -2; dx <= 2; dx++) {
+          for (let dy = -2; dy <= 2; dy++) {
+            if (Math.abs(dx) + Math.abs(dy) === 2) {
+              const nx = pos.x + dx;
+              const ny = pos.y + dy;
+              if (isInBounds(nx, ny) && isPlains(currentMap, nx, ny)) {
+                moves.add(`${nx},${ny}`);
+              }
+            }
+          }
+        }
+      }
     }
     return moves;
-  }, [game, isMyTurn, isHunter, preySecret]);
+  }, [game, isMyTurn, isHunter, preySecret, currentMap]);
 
   // Searched tiles for effects
   const searchedTiles = useMemo(() => {
@@ -486,8 +581,11 @@ export const GameView: React.FC<GameViewProps> = ({ sessionId, isHunter: initial
     if (isActing) return;
     // Hunter clicking a jungle tile → show context menu
     if (isHunter && game?.phase === GamePhase.HunterTurn && isJungle(currentMap, x, y)) {
+      const hunterPos = { x: game.hunter_x, y: game.hunter_y };
       const canMove = validMoves.has(`${x},${y}`);
-      const canSearch = !!game.prey_is_hidden;
+      // canSearch: tile is within Chebyshev-1 of hunter (diagonal included)
+      const canSearch = !!game.prey_is_hidden && canHunterSearch(hunterPos, { x, y });
+      const canPowerSearch = !!game.prey_is_hidden;
       if (canMove && !canSearch) {
         // No menu needed — just move
         handleTileClick(x, y);
@@ -495,7 +593,7 @@ export const GameView: React.FC<GameViewProps> = ({ sessionId, isHunter: initial
       }
       if (canMove || canSearch) {
         setSelectedTile({ x, y });
-        setContextMenu({ screenX, screenY, tileX: x, tileY: y, canMove, canSearch });
+        setContextMenu({ screenX, screenY, tileX: x, tileY: y, canMove, canSearch, canPowerSearch });
         return;
       }
     }
@@ -522,7 +620,7 @@ export const GameView: React.FC<GameViewProps> = ({ sessionId, isHunter: initial
         overflow: 'hidden',
       }}
     >
-      {/* Leave + Session ID */}
+      {/* Top-right controls */}
       <div
         style={{
           position: 'absolute',
@@ -534,45 +632,27 @@ export const GameView: React.FC<GameViewProps> = ({ sessionId, isHunter: initial
           gap: '8px',
         }}
       >
-        <div
+        <WalletButton />
+        <button
+          onClick={() => setShowHowToPlay(true)}
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            padding: '7px 16px',
-            background: 'var(--glass-bg)',
+            background: 'rgba(100, 210, 255, 0.08)',
             backdropFilter: 'blur(10px)',
-            border: '1px solid var(--glass-border)',
+            WebkitBackdropFilter: 'blur(10px)',
+            border: '1px solid rgba(100, 210, 255, 0.3)',
             borderRadius: '24px',
-            fontSize: '14px',
+            color: 'var(--color-prey)',
+            fontSize: '12px',
+            fontWeight: 700,
+            letterSpacing: '0.07em',
+            padding: '7px 16px',
+            cursor: 'pointer',
+            fontFamily: 'inherit',
+            whiteSpace: 'nowrap',
           }}
         >
-          <span style={{ color: 'var(--text-muted)', fontSize: '13px' }}>Session</span>
-          <span style={{ color: 'var(--text-primary)', fontWeight: 600, fontFamily: 'monospace' }}>
-            {sessionId}
-          </span>
-          <button
-            onClick={() => {
-              navigator.clipboard.writeText(String(sessionId));
-              setCopied(true);
-              setTimeout(() => setCopied(false), 2000);
-            }}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: copied ? 'var(--color-prey)' : 'var(--text-muted)',
-              cursor: 'pointer',
-              padding: '0 2px',
-              fontSize: '12px',
-              fontFamily: 'inherit',
-              fontWeight: 500,
-              transition: 'color 0.2s',
-            }}
-          >
-            {copied ? 'Copied' : 'Copy'}
-          </button>
-        </div>
-        <WalletButton />
+          HOW TO PLAY
+        </button>
         <button
           onClick={onBack}
           style={{
@@ -688,6 +768,7 @@ export const GameView: React.FC<GameViewProps> = ({ sessionId, isHunter: initial
         hunterPos={hunterPos}
         preyPos={preyPos}
         preyVisible={!game?.prey_is_hidden}
+        preyFrozen={!!game?.prey_is_frozen}
         preyGhostPos={preyGhostPos}
         lastKnownPreyPos={lastKnownPreyPos}
         searchedTiles={searchedTiles}
@@ -703,6 +784,7 @@ export const GameView: React.FC<GameViewProps> = ({ sessionId, isHunter: initial
         isHunter={isHunter}
         isActing={isActing}
         onPowerSearch={handlePowerSearch}
+        onEMP={handleEMP}
         onRespondSearch={handleRespondSearch}
         onClaimCatch={handleClaimCatch}
       />
@@ -802,6 +884,85 @@ export const GameView: React.FC<GameViewProps> = ({ sessionId, isHunter: initial
               }}
             >
               {copied ? '✓ Copied' : 'Copy ID'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* How to Play modal */}
+      {showHowToPlay && <HowToPlay onClose={() => setShowHowToPlay(false)} />}
+
+      {/* Game over overlay */}
+      {game?.phase === GamePhase.Ended && gameOverCountdown !== null && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 60,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'rgba(0,0,0,0.6)',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+          }}
+        >
+          <div
+            style={{
+              background: 'var(--glass-bg)',
+              backdropFilter: 'blur(var(--glass-blur))',
+              WebkitBackdropFilter: 'blur(var(--glass-blur))',
+              border: '1px solid var(--glass-border)',
+              borderRadius: '24px',
+              padding: '48px 56px',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '20px',
+              textAlign: 'center',
+              minWidth: '320px',
+            }}
+          >
+            {/* Result */}
+            <div style={{ fontSize: '42px', fontWeight: 800, letterSpacing: '-0.02em', color:
+              !game.winner ? 'var(--color-searched)'
+              : game.winner === address ? 'var(--color-prey)'
+              : 'var(--color-hunter)',
+            }}>
+              {!game.winner ? 'Draw' : game.winner === address ? 'You Win!' : 'You Lose'}
+            </div>
+
+            {/* Final score */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '22px', fontWeight: 700 }}>
+              <span style={{ color: address === game.player1 ? 'var(--color-prey)' : 'var(--text-secondary)' }}>
+                {game.player1_score}
+              </span>
+              <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontSize: '16px' }}>—</span>
+              <span style={{ color: address === game.player2 ? 'var(--color-prey)' : 'var(--text-secondary)' }}>
+                {game.player2_score}
+              </span>
+            </div>
+
+            {/* Countdown */}
+            <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-muted)' }}>
+              Returning to lobby in {gameOverCountdown}s...
+            </p>
+
+            <button
+              onClick={onBack}
+              style={{
+                background: 'var(--btn-primary-bg)',
+                border: '1px solid var(--btn-primary-border)',
+                borderRadius: '24px',
+                color: 'var(--btn-primary-text)',
+                fontSize: '14px',
+                fontWeight: 600,
+                padding: '10px 28px',
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+              }}
+            >
+              Back to Lobby
             </button>
           </div>
         </div>

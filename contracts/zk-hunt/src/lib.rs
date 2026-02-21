@@ -25,7 +25,7 @@ mod ultrahonk_contract {
     soroban_sdk::contractimport!(file = "ultrahonk_soroban_contract.wasm");
 }
 
-pub const ULTRAHONK_CONTRACT_ADDRESS: &str = "CCWILNWQW5J7PGH5IUZKQN2ZSFRWPFXKTSW75BJBKBAS6SHXKKQKGDJD";
+pub const ULTRAHONK_CONTRACT_ADDRESS: &str = "CB4QQWCTM4GHUQXADL72GCAIY4XOAD7CVFLVU7ZSOJ4SI3MDXSTYYYUN";
 
 // ============================================================================
 // Constants
@@ -121,6 +121,11 @@ pub enum Error {
     PreyNotHidden = 14,
     PreyAlreadyHidden = 15,
     IsJungle = 16,
+    NoEMP = 17,
+    EmpTargetHidden = 18,
+    EmpOutOfRange = 19,
+    NoDashes = 20,
+    PreyFrozen = 21,
 }
 
 // ============================================================================
@@ -162,6 +167,9 @@ pub struct Game {
     pub player1_score: u32,
     pub player2_score: u32,
     pub map_index: u32,
+    pub emp_uses_remaining: u32,
+    pub prey_is_frozen: bool,
+    pub prey_dash_remaining: u32,
 }
 
 #[contracttype]
@@ -260,6 +268,9 @@ impl ZkHuntContract {
             player1_score: 0,
             player2_score: 0,
             map_index,
+            emp_uses_remaining: 1,
+            prey_is_frozen: false,
+            prey_dash_remaining: 2,
         };
 
         let key = DataKey::Game(session_id);
@@ -386,7 +397,7 @@ impl ZkHuntContract {
 
         let dx = abs_diff(x, game.hunter_x);
         let dy = abs_diff(y, game.hunter_y);
-        if dx + dy > 1 {
+        if dx > 1 || dy > 1 {
             return Err(Error::InvalidMove);
         }
 
@@ -439,8 +450,8 @@ impl ZkHuntContract {
         let hx = game.hunter_x;
         let hy = game.hunter_y;
 
-        // Check all 4 directions + current tile
-        let offsets: [(i32, i32); 5] = [(0, 0), (-1, 0), (1, 0), (0, -1), (0, 1)];
+        // Check center + 4 cardinals + 4 diagonals (9 slots, matches ZK search_response circuit)
+        let offsets: [(i32, i32); 9] = [(0, 0), (-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1)];
         for (ox, oy) in offsets.iter() {
             let nx = hx as i32 + ox;
             let ny = hy as i32 + oy;
@@ -484,6 +495,10 @@ impl ZkHuntContract {
         }
 
         game.prey.require_auth();
+
+        if game.prey_is_frozen {
+            return Err(Error::PreyFrozen);
+        }
 
         if x >= 8 || y >= 8 {
             return Err(Error::OutOfBounds);
@@ -530,6 +545,10 @@ impl ZkHuntContract {
         }
 
         game.prey.require_auth();
+
+        if game.prey_is_frozen {
+            return Err(Error::PreyFrozen);
+        }
 
         if game.prey_is_hidden {
             return Err(Error::PreyAlreadyHidden);
@@ -581,6 +600,10 @@ impl ZkHuntContract {
         }
 
         game.prey.require_auth();
+
+        if game.prey_is_frozen {
+            return Err(Error::PreyFrozen);
+        }
 
         if !game.prey_is_hidden {
             return Err(Error::PreyNotHidden);
@@ -635,6 +658,10 @@ impl ZkHuntContract {
 
         game.prey.require_auth();
 
+        if game.prey_is_frozen {
+            return Err(Error::PreyFrozen);
+        }
+
         if !game.prey_is_hidden {
             return Err(Error::PreyNotHidden);
         }
@@ -663,12 +690,12 @@ impl ZkHuntContract {
     ///
     /// The proof's public inputs must match the on-chain game state:
     /// - commitment must equal game.prey_commitment
-    /// - searched_x/y arrays must match game.searched_tiles_x/y (padded with 255 to length 5)
+    /// - searched_x/y arrays must match game.searched_tiles_x/y (padded with 255 to length 9)
     ///
     /// Proof blob layout (after 4-byte num_fields header):
     ///   bytes 4..36:    commitment (32 bytes, Field)
-    ///   bytes 36..196:  searched_x[0..5] (5 * 32 bytes, u8 in last byte)
-    ///   bytes 196..356: searched_y[0..5] (5 * 32 bytes, u8 in last byte)
+    ///   bytes 36..324:  searched_x[0..9] (9 * 32 bytes, u8 in last byte)
+    ///   bytes 324..612: searched_y[0..9] (9 * 32 bytes, u8 in last byte)
     pub fn respond_search(
         env: Env,
         session_id: u32,
@@ -704,11 +731,11 @@ impl ZkHuntContract {
             "proof commitment does not match game state"
         );
 
-        // Extract searched_x[0..5] from proof (bytes 36..196, each 32 bytes, u8 in last byte)
+        // Extract searched_x[0..9] from proof (bytes 36..324, each 32 bytes, u8 in last byte)
         let num_tiles = game.searched_tiles_x.len();
-        for i in 0..5u32 {
+        for i in 0..9u32 {
             let proof_sx = extract_u8(&proof, 36 + i * 32);
-            let proof_sy = extract_u8(&proof, 196 + i * 32);
+            let proof_sy = extract_u8(&proof, 324 + i * 32);
 
             if i < num_tiles {
                 let expected_x = game.searched_tiles_x.get(i).unwrap() as u8;
@@ -738,6 +765,122 @@ impl ZkHuntContract {
         env.storage()
             .temporary()
             .extend_ttl(&key, GAME_TTL_LEDGERS, GAME_TTL_LEDGERS);
+
+        Ok(())
+    }
+
+    /// Hunter uses EMP to freeze visible prey for 1 turn (global range, 1 use per round).
+    pub fn hunter_emp(env: Env, session_id: u32) -> Result<(), Error> {
+        let key = DataKey::Game(session_id);
+        let mut game: Game = env
+            .storage()
+            .temporary()
+            .get(&key)
+            .ok_or(Error::GameNotFound)?;
+
+        if game.phase != GamePhase::HunterTurn {
+            return Err(Error::WrongPhase);
+        }
+
+        game.hunter.require_auth();
+
+        if game.emp_uses_remaining == 0 {
+            return Err(Error::NoEMP);
+        }
+
+        if game.prey_is_hidden {
+            return Err(Error::EmpTargetHidden);
+        }
+
+        game.prey_is_frozen = true;
+        game.emp_uses_remaining -= 1;
+        // Phase stays HunterTurn — hunter can still move this turn
+
+        env.storage().temporary().set(&key, &game);
+        env.storage()
+            .temporary()
+            .extend_ttl(&key, GAME_TTL_LEDGERS, GAME_TTL_LEDGERS);
+
+        Ok(())
+    }
+
+    /// Frozen prey skips their turn (called automatically by frontend).
+    pub fn prey_pass_frozen(env: Env, session_id: u32) -> Result<(), Error> {
+        let key = DataKey::Game(session_id);
+        let mut game: Game = env
+            .storage()
+            .temporary()
+            .get(&key)
+            .ok_or(Error::GameNotFound)?;
+
+        if game.phase != GamePhase::PreyTurn {
+            return Err(Error::WrongPhase);
+        }
+
+        game.prey.require_auth();
+
+        if !game.prey_is_frozen {
+            return Err(Error::WrongPhase);
+        }
+
+        game.prey_is_frozen = false;
+
+        check_prey_survival(&env, &key, &mut game);
+
+        Ok(())
+    }
+
+    /// Prey dashes up to 2 tiles on plains in a single move (2 uses per turn).
+    pub fn prey_dash_public(
+        env: Env,
+        session_id: u32,
+        x: u32,
+        y: u32,
+    ) -> Result<(), Error> {
+        let key = DataKey::Game(session_id);
+        let mut game: Game = env
+            .storage()
+            .temporary()
+            .get(&key)
+            .ok_or(Error::GameNotFound)?;
+
+        if game.phase != GamePhase::PreyTurn {
+            return Err(Error::WrongPhase);
+        }
+
+        game.prey.require_auth();
+
+        if game.prey_is_frozen {
+            return Err(Error::PreyFrozen);
+        }
+
+        if game.prey_dash_remaining == 0 {
+            return Err(Error::NoDashes);
+        }
+
+        if x >= 8 || y >= 8 {
+            return Err(Error::OutOfBounds);
+        }
+
+        // Must move to plains
+        let idx = (y * 8 + x) as usize;
+        if MAPS[game.map_index as usize][idx] == 1 {
+            return Err(Error::IsJungle);
+        }
+
+        // Dash distance: Manhattan <= 2
+        let dx = abs_diff(x, game.prey_x);
+        let dy = abs_diff(y, game.prey_y);
+        if dx + dy > 2 {
+            return Err(Error::InvalidMove);
+        }
+
+        game.prey_dash_remaining -= 1;
+        game.prey_x = x;
+        game.prey_y = y;
+        game.prey_is_hidden = false;
+
+        check_prey_survival(&env, &key, &mut game);
 
         Ok(())
     }
@@ -1012,6 +1155,9 @@ fn end_round(env: &Env, key: &DataKey, game: &mut Game, hunter_won_round: bool) 
     game.power_searches_remaining = POWER_SEARCHES_INITIAL;
     game.searched_tiles_x = vec![env];
     game.searched_tiles_y = vec![env];
+    game.emp_uses_remaining = 1;
+    game.prey_is_frozen = false;
+    game.prey_dash_remaining = 2;
     game.phase = GamePhase::HunterTurn;
 
     env.storage().temporary().set(key, game);

@@ -3,6 +3,7 @@ import { NoirService } from './NoirService';
 
 export const GRID_SIZE = 8;
 export const MAX_TURNS = 10;
+export const DASH_DISTANCE = 2;
 
 export interface Position {
   x: number;
@@ -82,6 +83,16 @@ export function manhattanDistance(a: Position, b: Position): number {
 
 export function isAdjacent(a: Position, b: Position): boolean {
   return manhattanDistance(a, b) <= 1;
+}
+
+/** Chebyshev distance ≤ 1 — allows diagonal tiles (hunter search/move range) */
+export function canHunterSearch(a: Position, b: Position): boolean {
+  return Math.abs(a.x - b.x) <= 1 && Math.abs(a.y - b.y) <= 1;
+}
+
+/** Manhattan distance ≤ 2 — prey dash range on plains */
+export function canPreyDash(a: Position, b: Position): boolean {
+  return manhattanDistance(a, b) <= DASH_DISTANCE;
 }
 
 export function getAdjacentTiles(pos: Position): Position[] {
@@ -180,7 +191,7 @@ export class GameService {
 
   /**
    * Generate a batched search_response proof proving prey is NOT at any of the searched tiles.
-   * Accepts arrays of searched coordinates (up to 5) and pads with 255 if fewer.
+   * Accepts arrays of searched coordinates (up to 9) and pads with 255 if fewer.
    * Commitment is computed automatically from position and nonce.
    */
   async generateSearchResponseProof(
@@ -192,11 +203,11 @@ export class GameService {
   ) {
     console.log(`[GameService] Generating batched search_response proof for ${searchedXArray.length} tiles...`);
 
-    // Pad arrays to length 5 with 255 (out of valid 0-7 range, always passes)
+    // Pad arrays to length 9 with 255 (out of valid 0-7 range, always passes)
     const paddedX = [...searchedXArray];
     const paddedY = [...searchedYArray];
-    while (paddedX.length < 5) paddedX.push(255);
-    while (paddedY.length < 5) paddedY.push(255);
+    while (paddedX.length < 9) paddedX.push(255);
+    while (paddedY.length < 9) paddedY.push(255);
 
     // Compute the real Poseidon2 commitment
     const commitment = await this.computeCommitment(myX, myY, myNonce);

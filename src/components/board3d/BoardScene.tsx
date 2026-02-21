@@ -48,6 +48,7 @@ interface BoardSceneProps {
   hunterPos: { x: number; y: number } | null;
   preyPos: { x: number; y: number } | null;
   preyVisible: boolean;
+  preyFrozen: boolean;
   preyGhostPos: { x: number; y: number } | null;
   lastKnownPreyPos: { x: number; y: number } | null;
   searchedTiles: Array<{ x: number; y: number }>;
@@ -99,6 +100,7 @@ export const BoardScene: React.FC<BoardSceneProps> = ({
   hunterPos,
   preyPos,
   preyVisible,
+  preyFrozen,
   preyGhostPos,
   lastKnownPreyPos,
   searchedTiles,
@@ -259,6 +261,7 @@ export const BoardScene: React.FC<BoardSceneProps> = ({
           position={[preyPos.x, preyPos.y]}
           type="prey"
           visible
+          frozen={preyFrozen}
         />
       )}
 
@@ -269,6 +272,7 @@ export const BoardScene: React.FC<BoardSceneProps> = ({
           type="prey"
           visible
           ghost
+          frozen={preyFrozen}
         />
       )}
 

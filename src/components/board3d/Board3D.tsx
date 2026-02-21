@@ -8,6 +8,7 @@ interface Board3DProps {
   hunterPos: { x: number; y: number } | null;
   preyPos: { x: number; y: number } | null;
   preyVisible: boolean;
+  preyFrozen: boolean;
   preyGhostPos: { x: number; y: number } | null;
   lastKnownPreyPos: { x: number; y: number } | null;
   searchedTiles: Array<{ x: number; y: number }>;

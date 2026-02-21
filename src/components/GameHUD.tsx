@@ -184,29 +184,95 @@ export const GameHUD: React.FC<GameHUDProps> = ({ game, playerAddress, isHunter 
           <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '12px' }}>P{oppNum}</span>
         </div>
 
-        <div style={divider} />
+        {/* Max Search counter (hunter only) */}
+        {isHunter && <div style={divider} />}
+        {isHunter && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>Max</span>
+            <div style={{ display: 'flex', gap: '4px' }}>
+              {Array.from({ length: 2 }, (_, i) => (
+                <span
+                  key={i}
+                  style={{
+                    width: 9,
+                    height: 9,
+                    borderRadius: '50%',
+                    background:
+                      i < game.power_searches_remaining
+                        ? 'var(--color-prey)'
+                        : 'rgba(255,255,255,0.1)',
+                    display: 'inline-block',
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        )}
 
-        {/* Power searches */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <span style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>Power</span>
-          <div style={{ display: 'flex', gap: '4px' }}>
-            {Array.from({ length: 3 }, (_, i) => (
+        {/* EMP counter (hunter) */}
+        {isHunter && (
+          <>
+            <div style={divider} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>EMP</span>
               <span
-                key={i}
                 style={{
                   width: 9,
                   height: 9,
                   borderRadius: '50%',
                   background:
-                    i < game.power_searches_remaining
-                      ? 'var(--color-prey)'
+                    game.emp_uses_remaining > 0
+                      ? 'var(--color-hunter)'
                       : 'rgba(255,255,255,0.1)',
                   display: 'inline-block',
                 }}
               />
-            ))}
-          </div>
-        </div>
+            </div>
+          </>
+        )}
+
+        {/* Dash counter (prey) */}
+        {!isHunter && (
+          <>
+            <div style={divider} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>Dash</span>
+              <div style={{ display: 'flex', gap: '4px' }}>
+                {Array.from({ length: 2 }, (_, i) => (
+                  <span
+                    key={i}
+                    style={{
+                      width: 9,
+                      height: 9,
+                      borderRadius: '50%',
+                      background:
+                        i < game.prey_dash_remaining
+                          ? 'var(--color-prey)'
+                          : 'rgba(255,255,255,0.1)',
+                      display: 'inline-block',
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Frozen indicator (prey) */}
+        {!isHunter && game.prey_is_frozen && (
+          <>
+            <div style={divider} />
+            <span
+              style={{
+                color: 'var(--color-hunter)',
+                fontSize: '13px',
+                fontWeight: 600,
+              }}
+            >
+              FROZEN
+            </span>
+          </>
+        )}
 
         {/* Prey hidden badge */}
         {game.prey_is_hidden && (

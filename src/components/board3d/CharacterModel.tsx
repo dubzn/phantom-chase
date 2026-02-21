@@ -9,6 +9,7 @@ interface CharacterModelProps {
   type: 'hunter' | 'prey';
   visible: boolean;
   ghost?: boolean;
+  frozen?: boolean;
 }
 
 // dron.glb: bbox ~2.82 x 0.74 x 2.16, centered near origin
@@ -73,11 +74,12 @@ export const DroneModel: React.FC<{ ghost: boolean }> = ({ ghost }) => {
   );
 };
 
-export const MouseModel: React.FC<{ ghost: boolean; animationName?: string }> = ({ ghost, animationName }) => {
+export const MouseModel: React.FC<{ ghost: boolean; frozen?: boolean; animationName?: string }> = ({ ghost, frozen = false, animationName }) => {
   const { scene, animations } = useGLTF('/3d/mouse.glb');
   const cloned = useMemo(() => SkeletonUtils.clone(scene), [scene]);
   const groupRef = useRef<THREE.Group>(null);
   const { actions } = useAnimations(animations, groupRef);
+  const frozenPulse = useRef(0);
 
   useEffect(() => {
     const action = (animationName ? actions[animationName] : null)
@@ -86,9 +88,11 @@ export const MouseModel: React.FC<{ ghost: boolean; animationName?: string }> = 
     if (action) {
       action.reset().play();
       action.setLoop(THREE.LoopRepeat, Infinity);
+      // Slow to near-stop when frozen
+      action.timeScale = frozen ? 0.05 : 1;
     }
     return () => { action?.stop(); };
-  }, [actions, animationName]);
+  }, [actions, animationName, frozen]);
 
   useEffect(() => {
     cloned.traverse((child) => {
@@ -98,18 +102,67 @@ export const MouseModel: React.FC<{ ghost: boolean; animationName?: string }> = 
         mesh.receiveShadow = true;
         const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
         mats.forEach((m) => {
-          m.transparent = ghost;
-          m.opacity = ghost ? 0.35 : 1;
+          if (m instanceof THREE.MeshStandardMaterial) {
+            if (frozen) {
+              m.color.set('#a0d8ef');
+              m.emissive.set('#1a4a7a');
+              m.emissiveIntensity = 0.4;
+              m.metalness = 0.6;
+              m.roughness = 0.1;
+            } else {
+              m.color.set('#ffffff');
+              m.emissive.set('#000000');
+              m.emissiveIntensity = 0;
+              m.metalness = 0;
+              m.roughness = 0.8;
+            }
+          }
+          m.transparent = ghost || frozen;
+          m.opacity = ghost ? 0.35 : frozen ? 0.9 : 1;
         });
       }
     });
-  }, [cloned, ghost]);
+  }, [cloned, ghost, frozen]);
+
+  useFrame((_, delta) => {
+    if (!frozen) return;
+    frozenPulse.current += delta * 3;
+  });
 
   return (
     <group ref={groupRef}>
       <group scale={[MOUSE_SCALE, MOUSE_SCALE, MOUSE_SCALE]} rotation={[0, 0, 0]}>
         <primitive object={cloned} />
       </group>
+      {/* Ice crystal ring */}
+      {frozen && (
+        <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0.15, 0]}>
+          <torusGeometry args={[0.35, 0.04, 8, 24]} />
+          <meshStandardMaterial
+            color="#88ddff"
+            emissive="#2266aa"
+            emissiveIntensity={1.2}
+            transparent
+            opacity={0.75}
+            metalness={0.8}
+            roughness={0.1}
+          />
+        </mesh>
+      )}
+      {frozen && (
+        <mesh rotation={[Math.PI / 3, 0, Math.PI / 4]} position={[0, 0.28, 0]}>
+          <torusGeometry args={[0.28, 0.03, 8, 24]} />
+          <meshStandardMaterial
+            color="#aaeeff"
+            emissive="#3388cc"
+            emissiveIntensity={1.0}
+            transparent
+            opacity={0.6}
+            metalness={0.8}
+            roughness={0.1}
+          />
+        </mesh>
+      )}
     </group>
   );
 };
@@ -119,6 +172,7 @@ export const CharacterModel: React.FC<CharacterModelProps> = ({
   type,
   visible,
   ghost = false,
+  frozen = false,
 }) => {
   const groupRef = useRef<THREE.Group>(null);
   const currentPos = useRef(new THREE.Vector3(position[0], 0, position[1]));
@@ -172,12 +226,12 @@ export const CharacterModel: React.FC<CharacterModelProps> = ({
       {type === 'hunter' ? (
         <DroneModel ghost={ghost} />
       ) : (
-        <MouseModel ghost={ghost} />
+        <MouseModel ghost={ghost} frozen={frozen} />
       )}
       <pointLight
-        color={color}
-        intensity={ghost ? 0.3 : 0.8}
-        distance={2.5}
+        color={frozen ? '#44aaff' : color}
+        intensity={ghost ? 0.3 : frozen ? 1.4 : 0.8}
+        distance={frozen ? 3.5 : 2.5}
         decay={2}
       />
     </group>

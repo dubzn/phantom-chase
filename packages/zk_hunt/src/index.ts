@@ -48,7 +48,12 @@ export const Errors = {
   13: {message:"NoPowerSearches"},
   14: {message:"PreyNotHidden"},
   15: {message:"PreyAlreadyHidden"},
-  16: {message:"IsJungle"}
+  16: {message:"IsJungle"},
+  17: {message:"NoEMP"},
+  18: {message:"EmpTargetHidden"},
+  19: {message:"EmpOutOfRange"},
+  20: {message:"NoDashes"},
+  21: {message:"PreyFrozen"}
 }
 
 export enum GamePhase {
@@ -61,6 +66,7 @@ export enum GamePhase {
 
 
 export interface Game {
+  emp_uses_remaining: u32;
   hunter: string;
   hunter_x: u32;
   hunter_y: u32;
@@ -73,6 +79,8 @@ export interface Game {
   power_searches_remaining: u32;
   prey: string;
   prey_commitment: Buffer;
+  prey_dash_remaining: u32;
+  prey_is_frozen: boolean;
   prey_is_hidden: boolean;
   prey_x: u32;
   prey_y: u32;
@@ -160,14 +168,32 @@ export interface Client {
    * 
    * The proof's public inputs must match the on-chain game state:
    * - commitment must equal game.prey_commitment
-   * - searched_x/y arrays must match game.searched_tiles_x/y (padded with 255 to length 5)
+   * - searched_x/y arrays must match game.searched_tiles_x/y (padded with 255 to length 9)
    * 
    * Proof blob layout (after 4-byte num_fields header):
    * bytes 4..36:    commitment (32 bytes, Field)
-   * bytes 36..196:  searched_x[0..5] (5 * 32 bytes, u8 in last byte)
-   * bytes 196..356: searched_y[0..5] (5 * 32 bytes, u8 in last byte)
+   * bytes 36..324:  searched_x[0..9] (9 * 32 bytes, u8 in last byte)
+   * bytes 324..612: searched_y[0..9] (9 * 32 bytes, u8 in last byte)
    */
   respond_search: ({session_id, proof}: {session_id: u32, proof: Buffer}, options?: MethodOptions) => Promise<AssembledTransaction<Result<void>>>
+
+  /**
+   * Construct and simulate a hunter_emp transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+   * Hunter uses EMP to freeze visible prey for 1 turn (global range, 1 use per round).
+   */
+  hunter_emp: ({session_id}: {session_id: u32}, options?: MethodOptions) => Promise<AssembledTransaction<Result<void>>>
+
+  /**
+   * Construct and simulate a prey_pass_frozen transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+   * Frozen prey skips their turn (called automatically by frontend).
+   */
+  prey_pass_frozen: ({session_id}: {session_id: u32}, options?: MethodOptions) => Promise<AssembledTransaction<Result<void>>>
+
+  /**
+   * Construct and simulate a prey_dash_public transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+   * Prey dashes up to 2 tiles on plains in a single move (2 uses per turn).
+   */
+  prey_dash_public: ({session_id, x, y}: {session_id: u32, x: u32, y: u32}, options?: MethodOptions) => Promise<AssembledTransaction<Result<void>>>
 
   /**
    * Construct and simulate a claim_catch transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
@@ -216,9 +242,9 @@ export class Client extends ContractClient {
   }
   constructor(public readonly options: ContractClientOptions) {
     super(
-      new ContractSpec([ "AAAABAAAAAAAAAAAAAAABUVycm9yAAAAAAAAEAAAAAAAAAAMR2FtZU5vdEZvdW5kAAAAAQAAAAAAAAAJTm90UGxheWVyAAAAAAAAAgAAAAAAAAAKV3JvbmdQaGFzZQAAAAAAAwAAAAAAAAAJTm90SHVudGVyAAAAAAAABAAAAAAAAAAHTm90UHJleQAAAAAFAAAAAAAAAAtPdXRPZkJvdW5kcwAAAAAGAAAAAAAAAAtJbnZhbGlkTW92ZQAAAAAHAAAAAAAAAAlOb3RKdW5nbGUAAAAAAAAIAAAAAAAAAAtQcm9vZkZhaWxlZAAAAAAJAAAAAAAAABBHYW1lQWxyZWFkeUVuZGVkAAAACgAAAAAAAAARTm90QWRqYWNlbnRKdW5nbGUAAAAAAAALAAAAAAAAAA1TZWFyY2hQZW5kaW5nAAAAAAAADAAAAAAAAAAPTm9Qb3dlclNlYXJjaGVzAAAAAA0AAAAAAAAADVByZXlOb3RIaWRkZW4AAAAAAAAOAAAAAAAAABFQcmV5QWxyZWFkeUhpZGRlbgAAAAAAAA8AAAAAAAAACElzSnVuZ2xlAAAAEA==",
+      new ContractSpec([ "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",
-        "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",
+        "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",
@@ -232,7 +258,10 @@ export class Client extends ContractClient {
         "AAAAAAAAADxQcmV5IGVudGVycyBqdW5nbGUgZnJvbSBhIHZpc2libGUgcG9zaXRpb24gKGJlY29tZXMgaGlkZGVuKS4AAAARcHJleV9lbnRlcl9qdW5nbGUAAAAAAAADAAAAAAAAAApzZXNzaW9uX2lkAAAAAAAEAAAAAAAAAA5uZXdfY29tbWl0bWVudAAAAAAD7gAAACAAAAAAAAAABXByb29mAAAAAAAADgAAAAEAAAPpAAAD7QAAAAAAAAAD",
         "AAAAAAAAACxQcmV5IG1vdmVzIHdpdGhpbiBqdW5nbGUgKGhpZGRlbiB0byBoaWRkZW4pLgAAABBwcmV5X21vdmVfanVuZ2xlAAAAAwAAAAAAAAAKc2Vzc2lvbl9pZAAAAAAABAAAAAAAAAAObmV3X2NvbW1pdG1lbnQAAAAAA+4AAAAgAAAAAAAAAAVwcm9vZgAAAAAAAA4AAAABAAAD6QAAA+0AAAAAAAAAAw==",
         "AAAAAAAAADZQcmV5IGV4aXRzIGp1bmdsZSAocmV2ZWFscyBwb3NpdGlvbiwgYmVjb21lcyB2aXNpYmxlKS4AAAAAABBwcmV5X2V4aXRfanVuZ2xlAAAAAwAAAAAAAAAKc2Vzc2lvbl9pZAAAAAAABAAAAAAAAAABeAAAAAAAAAQAAAAAAAAAAXkAAAAAAAAEAAAAAQAAA+kAAAPtAAAAAAAAAAM=",
-        "AAAAAAAAAfBQcmV5IHJlc3BvbmRzIHRvIGEgc2VhcmNoIHdpdGggYSBzaW5nbGUgYmF0Y2hlZCBaSyBwcm9vZiBvZiBub24tcHJlc2VuY2UuCgpUaGUgcHJvb2YncyBwdWJsaWMgaW5wdXRzIG11c3QgbWF0Y2ggdGhlIG9uLWNoYWluIGdhbWUgc3RhdGU6Ci0gY29tbWl0bWVudCBtdXN0IGVxdWFsIGdhbWUucHJleV9jb21taXRtZW50Ci0gc2VhcmNoZWRfeC95IGFycmF5cyBtdXN0IG1hdGNoIGdhbWUuc2VhcmNoZWRfdGlsZXNfeC95IChwYWRkZWQgd2l0aCAyNTUgdG8gbGVuZ3RoIDUpCgpQcm9vZiBibG9iIGxheW91dCAoYWZ0ZXIgNC1ieXRlIG51bV9maWVsZHMgaGVhZGVyKToKYnl0ZXMgNC4uMzY6ICAgIGNvbW1pdG1lbnQgKDMyIGJ5dGVzLCBGaWVsZCkKYnl0ZXMgMzYuLjE5NjogIHNlYXJjaGVkX3hbMC4uNV0gKDUgKiAzMiBieXRlcywgdTggaW4gbGFzdCBieXRlKQpieXRlcyAxOTYuLjM1Njogc2VhcmNoZWRfeVswLi41XSAoNSAqIDMyIGJ5dGVzLCB1OCBpbiBsYXN0IGJ5dGUpAAAADnJlc3BvbmRfc2VhcmNoAAAAAAACAAAAAAAAAApzZXNzaW9uX2lkAAAAAAAEAAAAAAAAAAVwcm9vZgAAAAAAAA4AAAABAAAD6QAAA+0AAAAAAAAAAw==",
+        "AAAAAAAAAfBQcmV5IHJlc3BvbmRzIHRvIGEgc2VhcmNoIHdpdGggYSBzaW5nbGUgYmF0Y2hlZCBaSyBwcm9vZiBvZiBub24tcHJlc2VuY2UuCgpUaGUgcHJvb2YncyBwdWJsaWMgaW5wdXRzIG11c3QgbWF0Y2ggdGhlIG9uLWNoYWluIGdhbWUgc3RhdGU6Ci0gY29tbWl0bWVudCBtdXN0IGVxdWFsIGdhbWUucHJleV9jb21taXRtZW50Ci0gc2VhcmNoZWRfeC95IGFycmF5cyBtdXN0IG1hdGNoIGdhbWUuc2VhcmNoZWRfdGlsZXNfeC95IChwYWRkZWQgd2l0aCAyNTUgdG8gbGVuZ3RoIDkpCgpQcm9vZiBibG9iIGxheW91dCAoYWZ0ZXIgNC1ieXRlIG51bV9maWVsZHMgaGVhZGVyKToKYnl0ZXMgNC4uMzY6ICAgIGNvbW1pdG1lbnQgKDMyIGJ5dGVzLCBGaWVsZCkKYnl0ZXMgMzYuLjMyNDogIHNlYXJjaGVkX3hbMC4uOV0gKDkgKiAzMiBieXRlcywgdTggaW4gbGFzdCBieXRlKQpieXRlcyAzMjQuLjYxMjogc2VhcmNoZWRfeVswLi45XSAoOSAqIDMyIGJ5dGVzLCB1OCBpbiBsYXN0IGJ5dGUpAAAADnJlc3BvbmRfc2VhcmNoAAAAAAACAAAAAAAAAApzZXNzaW9uX2lkAAAAAAAEAAAAAAAAAAVwcm9vZgAAAAAAAA4AAAABAAAD6QAAA+0AAAAAAAAAAw==",
+        "AAAAAAAAAFJIdW50ZXIgdXNlcyBFTVAgdG8gZnJlZXplIHZpc2libGUgcHJleSBmb3IgMSB0dXJuIChnbG9iYWwgcmFuZ2UsIDEgdXNlIHBlciByb3VuZCkuAAAAAAAKaHVudGVyX2VtcAAAAAAAAQAAAAAAAAAKc2Vzc2lvbl9pZAAAAAAABAAAAAEAAAPpAAAD7QAAAAAAAAAD",
+        "AAAAAAAAAEBGcm96ZW4gcHJleSBza2lwcyB0aGVpciB0dXJuIChjYWxsZWQgYXV0b21hdGljYWxseSBieSBmcm9udGVuZCkuAAAAEHByZXlfcGFzc19mcm96ZW4AAAABAAAAAAAAAApzZXNzaW9uX2lkAAAAAAAEAAAAAQAAA+kAAAPtAAAAAAAAAAM=",
+        "AAAAAAAAAEdQcmV5IGRhc2hlcyB1cCB0byAyIHRpbGVzIG9uIHBsYWlucyBpbiBhIHNpbmdsZSBtb3ZlICgyIHVzZXMgcGVyIHR1cm4pLgAAAAAQcHJleV9kYXNoX3B1YmxpYwAAAAMAAAAAAAAACnNlc3Npb25faWQAAAAAAAQAAAAAAAAAAXgAAAAAAAAEAAAAAAAAAAF5AAAAAAAABAAAAAEAAAPpAAAD7QAAAAAAAAAD",
         "AAAAAAAAADdIdW50ZXIgY2xhaW1zIGNhdGNoIChwcmV5IGZhaWxlZCB0byByZXNwb25kIHRvIHNlYXJjaCkuAAAAAAtjbGFpbV9jYXRjaAAAAAABAAAAAAAAAApzZXNzaW9uX2lkAAAAAAAEAAAAAQAAA+kAAAATAAAAAw==",
         "AAAAAAAAACdSZWFkIGdhbWUgc3RhdGUgKGZvciBmcm9udGVuZCBwb2xsaW5nKS4AAAAACGdldF9nYW1lAAAAAQAAAAAAAAAKc2Vzc2lvbl9pZAAAAAAABAAAAAEAAAPpAAAH0AAAAARHYW1lAAAAAw==",
         "AAAAAAAAAAAAAAAJZ2V0X2FkbWluAAAAAAAAAAAAAAEAAAAT",
@@ -254,6 +283,9 @@ export class Client extends ContractClient {
         prey_move_jungle: this.txFromJSON<Result<void>>,
         prey_exit_jungle: this.txFromJSON<Result<void>>,
         respond_search: this.txFromJSON<Result<void>>,
+        hunter_emp: this.txFromJSON<Result<void>>,
+        prey_pass_frozen: this.txFromJSON<Result<void>>,
+        prey_dash_public: this.txFromJSON<Result<void>>,
         claim_catch: this.txFromJSON<Result<string>>,
         get_game: this.txFromJSON<Result<Game>>,
         get_admin: this.txFromJSON<string>,
