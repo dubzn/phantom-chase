@@ -25,9 +25,11 @@ RPC_URL="${RPC_URL:-http://localhost:8000/rpc}"
 NETWORK_PASSPHRASE="${NETWORK_PASSPHRASE:-Standalone Network ; February 2017}"
 SOURCE="${SOURCE:-default}"
 GAME_HUB_ADDRESS="${GAME_HUB_ADDRESS:-}"
+MOCK_GAME_HUB_ID=""
 
 ULTRAHONK_WASM="$PROJECT_DIR/contracts/zk-hunt/ultrahonk_soroban_contract.wasm"
 ZK_HUNT_WASM="$PROJECT_DIR/target/wasm32v1-none/release/zk_hunt.wasm"
+MOCK_GAME_HUB_WASM="$PROJECT_DIR/target/wasm32v1-none/release/mock_game_hub.wasm"
 
 CIRCUITS_DIR="$PROJECT_DIR/circuits"
 PUBLIC_CIRCUITS_DIR="$PROJECT_DIR/public/circuits"
@@ -163,6 +165,17 @@ compile_circuits() {
     info "All circuits compiled"
 }
 
+# ---- Step 2b: Build mock-game-hub ----
+build_mock_game_hub() {
+    info "Building mock-game-hub..."
+
+    cargo build --release --target wasm32v1-none -p mock-game-hub \
+        --manifest-path "$PROJECT_DIR/Cargo.toml"
+
+    [ -f "$MOCK_GAME_HUB_WASM" ] || error "Build failed: $MOCK_GAME_HUB_WASM not found"
+    info "mock-game-hub built successfully"
+}
+
 # ---- Step 3: Deploy ultrahonk contract ----
 deploy_ultrahonk() {
     info "Deploying ultrahonk_soroban_contract..."
@@ -222,6 +235,20 @@ deploy_zk_hunt() {
     info "zk-hunt deployed: $ZK_HUNT_ID"
 }
 
+# ---- Step 6b: Deploy mock-game-hub ----
+deploy_mock_game_hub() {
+    info "Deploying mock-game-hub..."
+
+    MOCK_GAME_HUB_ID=$(stellar contract deploy \
+        --wasm "$MOCK_GAME_HUB_WASM" \
+        --source "$SOURCE" \
+        --rpc-url "$RPC_URL" \
+        --network-passphrase "$NETWORK_PASSPHRASE" \
+        --config-dir "$CONFIG_DIR")
+
+    info "mock-game-hub deployed: $MOCK_GAME_HUB_ID"
+}
+
 # ---- Step 7: Set verification keys ----
 set_vks() {
     info "Setting verification keys..."
@@ -255,12 +282,16 @@ set_vks() {
 
 # ---- Step 7b: Set Game Hub address ----
 set_game_hub() {
-    if [ -z "$GAME_HUB_ADDRESS" ]; then
-        warn "GAME_HUB_ADDRESS not set, skipping Game Hub configuration (local dev)."
+    # Use external GAME_HUB_ADDRESS if provided (real hub / testnet),
+    # otherwise fall back to the mock we just deployed.
+    local hub_addr="${GAME_HUB_ADDRESS:-$MOCK_GAME_HUB_ID}"
+
+    if [ -z "$hub_addr" ]; then
+        warn "No Game Hub address available, skipping Game Hub configuration."
         return 0
     fi
 
-    info "Setting Game Hub address to $GAME_HUB_ADDRESS..."
+    info "Setting Game Hub address to $hub_addr..."
 
     stellar contract invoke \
         --id "$ZK_HUNT_ID" \
@@ -269,7 +300,7 @@ set_game_hub() {
         --network-passphrase "$NETWORK_PASSPHRASE" \
         --config-dir "$CONFIG_DIR" \
         -- set_game_hub \
-        --game_hub "$GAME_HUB_ADDRESS"
+        --game_hub "$hub_addr"
 
     info "Game Hub address set"
 }
@@ -315,6 +346,7 @@ STELLAR_SCAFFOLD_ENV=development
 XDG_CONFIG_HOME=".config"
 PUBLIC_ZK_HUNT_CONTRACT_ID="$ZK_HUNT_ID"
 PUBLIC_ULTRAHONK_CONTRACT_ID="$ULTRAHONK_ID"
+PUBLIC_MOCK_GAME_HUB_CONTRACT_ID="$MOCK_GAME_HUB_ID"
 PUBLIC_STELLAR_NETWORK="LOCAL"
 PUBLIC_STELLAR_NETWORK_PASSPHRASE="Standalone Network ; February 2017"
 PUBLIC_STELLAR_RPC_URL="$RPC_URL"
@@ -327,6 +359,11 @@ EOF
             echo "PUBLIC_ZK_HUNT_CONTRACT_ID=\"$ZK_HUNT_ID\"" >> "$ENV_FILE"
         fi
         sed -i.bak "s|^PUBLIC_ULTRAHONK_CONTRACT_ID=.*|PUBLIC_ULTRAHONK_CONTRACT_ID=\"$ULTRAHONK_ID\"|" "$ENV_FILE"
+        if grep -q "^PUBLIC_MOCK_GAME_HUB_CONTRACT_ID=" "$ENV_FILE"; then
+            sed -i.bak "s|^PUBLIC_MOCK_GAME_HUB_CONTRACT_ID=.*|PUBLIC_MOCK_GAME_HUB_CONTRACT_ID=\"$MOCK_GAME_HUB_ID\"|" "$ENV_FILE"
+        else
+            echo "PUBLIC_MOCK_GAME_HUB_CONTRACT_ID=\"$MOCK_GAME_HUB_ID\"" >> "$ENV_FILE"
+        fi
         rm -f "${ENV_FILE}.bak"
     fi
 
@@ -340,8 +377,9 @@ print_summary() {
     echo -e "${GREEN}  Deploy complete!${NC}"
     echo -e "${GREEN}========================================${NC}"
     echo ""
-    echo "  ultrahonk:  $ULTRAHONK_ID"
-    echo "  zk-hunt:    $ZK_HUNT_ID"
+    echo "  ultrahonk:      $ULTRAHONK_ID"
+    echo "  mock-game-hub:  $MOCK_GAME_HUB_ID"
+    echo "  zk-hunt:        $ZK_HUNT_ID"
     echo ""
     echo "  Circuits compiled and VKs set on-chain."
     echo "  TypeScript bindings generated."
@@ -362,10 +400,12 @@ main() {
     wait_for_network
     fund_account
     compile_circuits
+    build_mock_game_hub
     deploy_ultrahonk
     update_source
     build
     deploy_zk_hunt
+    deploy_mock_game_hub
     set_vks
     set_game_hub
     update_env
