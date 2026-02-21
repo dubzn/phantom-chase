@@ -707,6 +707,106 @@ export const GameView: React.FC<GameViewProps> = ({ sessionId, isHunter: initial
         onClaimCatch={handleClaimCatch}
       />
 
+      {/* Waiting for player 2 modal */}
+      {game?.phase === GamePhase.WaitingForPlayer2 && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 50,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'rgba(0, 0, 0, 0.55)',
+            backdropFilter: 'blur(6px)',
+            WebkitBackdropFilter: 'blur(6px)',
+          }}
+        >
+          <div
+            style={{
+              background: 'var(--glass-bg)',
+              backdropFilter: 'blur(var(--glass-blur))',
+              WebkitBackdropFilter: 'blur(var(--glass-blur))',
+              border: '1px solid var(--glass-border)',
+              borderRadius: '24px',
+              padding: '40px 48px',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '24px',
+              maxWidth: '400px',
+              width: '90%',
+              textAlign: 'center',
+            }}
+          >
+            <span className="spinner" style={{ width: '32px', height: '32px', borderWidth: '3px' }} />
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <h2 style={{ margin: 0, fontSize: '22px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                Waiting for another player
+              </h2>
+              <p style={{ margin: 0, fontSize: '14px', color: 'var(--text-muted)' }}>
+                Share this ID so your opponent can join
+              </p>
+            </div>
+
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '20px 32px',
+                background: 'rgba(100, 210, 255, 0.06)',
+                border: '1px solid rgba(100, 210, 255, 0.2)',
+                borderRadius: '16px',
+                width: '100%',
+                boxSizing: 'border-box',
+              }}
+            >
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                Session ID
+              </span>
+              <span
+                style={{
+                  fontSize: '72px',
+                  fontWeight: 800,
+                  fontFamily: 'monospace',
+                  color: 'var(--color-prey)',
+                  lineHeight: 1,
+                  letterSpacing: '-0.02em',
+                }}
+              >
+                {sessionId}
+              </span>
+            </div>
+
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(String(sessionId));
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+              }}
+              style={{
+                background: copied ? 'rgba(100, 210, 255, 0.12)' : 'transparent',
+                border: `1px solid ${copied ? 'rgba(100, 210, 255, 0.35)' : 'var(--glass-border)'}`,
+                borderRadius: '24px',
+                color: copied ? 'var(--color-prey)' : 'var(--text-secondary)',
+                fontSize: '14px',
+                padding: '10px 28px',
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+                fontWeight: 600,
+                transition: 'all 0.2s',
+                width: '100%',
+              }}
+            >
+              {copied ? '✓ Copied' : 'Copy ID'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Tile context menu */}
       {contextMenu && (
         <TileContextMenu
