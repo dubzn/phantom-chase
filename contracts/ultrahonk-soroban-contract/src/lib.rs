@@ -12,7 +12,7 @@ use soroban_sdk::{
 use ark_bn254::{Fq, G1Affine};
 use ark_ff::PrimeField;
 
-use ultrahonk_rust_verifier::{
+use rs-soroban-ultrahonk::{
     types::{G1Point, VerificationKey},
     UltraHonkVerifier,
 };
