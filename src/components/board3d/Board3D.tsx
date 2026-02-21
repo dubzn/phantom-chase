@@ -37,6 +37,7 @@ export const Board3D: React.FC<Board3DProps> = (props) => {
           near: 0.1,
           far: 500,
         }}
+        shadows="soft"
         style={{ background: 'transparent' }}
         gl={{ antialias: true, alpha: true }}
       >

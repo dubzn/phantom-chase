@@ -12,7 +12,7 @@ interface CharacterModelProps {
 }
 
 // dron.glb: bbox ~2.82 x 0.74 x 2.16, centered near origin
-const DRONE_SCALE = 0.4;
+const DRONE_SCALE = 0.5;
 
 // mouse.glb: bbox ~0.89 x 4.92 x 1.17, skinned mesh
 const MOUSE_SCALE = 0.3;
@@ -36,6 +36,8 @@ const DroneModel: React.FC<{ ghost: boolean }> = ({ ghost }) => {
     cloned.traverse((child) => {
       if ((child as THREE.Mesh).isMesh) {
         const mesh = child as THREE.Mesh;
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
         const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
         mats.forEach((m) => {
           m.transparent = ghost;
@@ -71,6 +73,8 @@ const MouseModel: React.FC<{ ghost: boolean }> = ({ ghost }) => {
     cloned.traverse((child) => {
       if ((child as THREE.Mesh).isMesh) {
         const mesh = child as THREE.Mesh;
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
         const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
         mats.forEach((m) => {
           m.transparent = ghost;
@@ -104,7 +108,7 @@ export const CharacterModel: React.FC<CharacterModelProps> = ({
   const prevTarget = useRef<[number, number]>(position);
 
   const color = type === 'hunter' ? '#ff6961' : '#64d2ff';
-  const yBase = type === 'hunter' ? 0.45 : 0.2;
+  const yBase = type === 'hunter' ? 1.2 : 0.2;
 
   const isPrey = type === 'prey';
 

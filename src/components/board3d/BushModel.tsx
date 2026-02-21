@@ -22,6 +22,8 @@ function fixMaterials(obj: THREE.Object3D) {
   obj.traverse((child) => {
     if ((child as THREE.Mesh).isMesh) {
       const mesh = child as THREE.Mesh;
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
       const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
       mats.forEach((mat) => {
         mat.transparent = false;

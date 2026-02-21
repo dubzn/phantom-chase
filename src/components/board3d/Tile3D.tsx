@@ -88,6 +88,7 @@ export const Tile3D: React.FC<Tile3DProps> = ({
     <mesh
       ref={meshRef}
       position={[x, height / 2, y]}
+      receiveShadow
       onClick={(e) => {
         e.stopPropagation();
         onClick(x, y, e.clientX, e.clientY);
