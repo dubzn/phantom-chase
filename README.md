@@ -1,6 +1,8 @@
 # Phantom Chase
 
-> A zero-knowledge hunter vs. prey game on the Stellar blockchain — built for a hackathon.
+> A zero-knowledge hunter vs. prey game on the Stellar blockchain.
+
+Inspired by **[ZK Hunt: an exploration into the unknown](https://0xparc.org/blog/zk-hunt)** by 0xPARC — the original exploration of cryptographic fog-of-war in on-chain games. Phantom Chase brings those ideas to the Stellar ecosystem using Noir circuits, UltraHonk proofs, and Soroban smart contracts.
 
 ---
 
@@ -8,93 +10,104 @@
 
 Phantom Chase is a 1v1 asymmetric strategy game where one player hunts and the other hides. The twist: the prey can become **cryptographically invisible** using zero-knowledge proofs. When the prey enters a jungle tile, their real position is replaced by a Poseidon2 hash commitment — the hunter sees only a ghost, the blockchain knows nothing more.
 
-Every move, every search, every evasion is settled on-chain via Soroban smart contracts on the Stellar network. No server, no trust — just math.
+Every move, every search, every evasion is settled on-chain via Soroban smart contracts on Stellar. No server, no trust — just math.
 
 ---
 
-## How it Works
+## Game Mechanics
 
 ### Roles
 
 | Role | Objective |
 |------|-----------|
-| **Hunter** | Move across the board and search tiles to catch the prey |
-| **Prey** | Evade the hunter and survive until the round ends |
+| **Hunter** (drone) | Search the jungle and catch the prey before time runs out |
+| **Prey** (mouse) | Evade the hunter and survive all 10 turns |
 
 Roles swap after each round. The player with the most points across all rounds wins.
 
 ### Board
 
-An 8x8 grid with two terrain types:
+An 8×8 grid with two terrain types:
 
 - **Plains** — fully visible. Position is public on-chain.
-- **Jungle** — dense cover. Prey can hide here using ZK proofs.
+- **Jungle** — dense cover. Prey hides here using ZK proofs.
 
-There are 20 different maps (central block, diagonal bands, spirals, etc.), randomly assigned per match.
+There are **20 hand-crafted maps** (central block, spirals, mazes, rivers, borders, diagonals, and more), randomly assigned per match.
 
 ### Turn Structure
 
-Each round alternates turns between hunter and prey (up to 10 turns). On each turn:
+Each round runs up to **10 turns**. On each turn:
 
-- **Hunter**: move one tile (orthogonally) or search jungle tiles
-- **Prey**: move one tile — publicly on plains, privately in jungle
+| Phase | Action |
+|-------|--------|
+| `HunterTurn` | Hunter moves one tile, searches, uses Max Search, or fires EMP |
+| `PreyTurn` | Prey moves one tile — publicly on plains, privately in jungle |
+| `SearchPending` | Prey auto-generates a ZK proof they weren't at the searched tiles |
 
-### Winning a Round
+### Scoring
 
-- **Hunter scores** if they successfully search the tile where the prey is hiding
-- **Prey scores** if they survive all turns without being caught
-
----
-
-## Features
-
-### Zero-Knowledge Position Privacy
-
-When the prey enters jungle, their position is hidden behind a cryptographic commitment (`Poseidon2(x, y, nonce)`). The nonce is kept client-side only. The contract and the hunter never see the real coordinates.
-
-### ZK-Verified Moves
-
-Every hidden move (jungle-to-jungle) is backed by an **UltraHonk proof** generated in the browser (~30–60s). The proof verifies:
-
-- The old commitment matches the previous position
-- The new commitment matches the new position
-- The move is valid (Manhattan distance ≤ 1)
-- The destination tile is actually jungle
-
-### ZK-Verified Search Response
-
-When the hunter searches tiles, the prey must prove they are **not** at any of the searched positions — without revealing where they actually are. The circuit supports batches of up to 5 searched tiles simultaneously.
-
-### Power Search
-
-The hunter has 3 Power Search charges per match. Using one searches all adjacent jungle tiles at once — each triggering a separate ZK proof response from the prey.
-
-### 20 Unique Maps
-
-A pool of 20 hand-crafted 8x8 maps with varied jungle layouts: central blocks, spirals, mazes, rivers, borders, diagonals, and more. Each game uses a different map.
-
-### 3D Board Rendering
-
-The board is rendered in 3D using React Three Fiber. Jungle tiles and plains have distinct visual styles, with animated effects for searched tiles and valid move highlighting.
-
-### On-Chain Game State
-
-All game state (phase, scores, positions, turns, commitments) lives in a Soroban smart contract. The frontend polls every 3 seconds with no backend required.
+- **Hunter scores** — they step onto the prey's tile, or the prey concedes a search
+- **Prey scores** — they survive all 10 turns of the round
 
 ---
 
-## Tech Stack
+## Special Abilities
 
-| Layer | Technology |
-|-------|-----------|
-| ZK Circuits | Noir (v1.0.0-beta.9) |
-| ZK Prover | Barretenberg / UltraHonk (v0.87.0) |
-| On-chain Verifier | `ultrahonk-soroban-contract` (pre-compiled WASM) |
-| Smart Contracts | Rust / Soroban SDK 23.1.0 |
-| Blockchain | Stellar (local or testnet) |
-| Frontend | React + TypeScript + Vite |
-| 3D Rendering | React Three Fiber |
-| Wallet | Freighter via `@creit.tech/stellar-wallets-kit` |
+### Hunter
+
+| Ability | Uses | Description |
+|---------|------|-------------|
+| **Max Search** | 2 / round | Searches all adjacent jungle tiles at once, including diagonals |
+| **EMP** | 1 / round | Freezes the visible prey — prey skips their next turn, **hunter still moves this turn** |
+
+### Prey
+
+| Ability | Uses | Description |
+|---------|------|-------------|
+| **Dash** | 2 / turn | Move 2 tiles at once on plains (only while visible) |
+
+---
+
+## Zero-Knowledge Architecture
+
+```mermaid
+flowchart TD
+    subgraph Browser["Browser (Client)"]
+        UI["React + Three.js\nGame UI"]
+        NS["NoirService\nnoir_js + nargo_wasm"]
+        BB["@aztec/bb.js\nUltraHonk Prover"]
+        FW["Freighter Wallet"]
+        UI -->|"generate proof"| NS
+        NS -->|"witness + circuit"| BB
+        BB -->|"proof blob"| UI
+        UI -->|"sign & send tx"| FW
+    end
+
+    subgraph Circuits["Noir Circuits (compiled to WASM)"]
+        JM["jungle_move\nproves valid hidden move"]
+        SR["search_response\nproves not at searched tiles (×9)"]
+        CM["commitment\ncomputes Poseidon2(x,y,nonce)"]
+    end
+
+    subgraph Stellar["Stellar / Soroban"]
+        ZKH["zk-hunt contract\nGame State Machine"]
+        UH["ultrahonk-soroban-contract\nOn-chain ZK Verifier"]
+    end
+
+    NS --> JM & SR & CM
+    FW -->|"signed transaction"| ZKH
+    ZKH -->|"cross-contract call"| UH
+    UH -->|"accept / reject proof"| ZKH
+```
+
+### Proof Flow
+
+1. Player triggers an action (enter jungle, move in jungle, respond to search)
+2. Frontend calls `NoirService.generateProof()` — loads circuit WASM, generates witness, runs UltraHonk prover (~30–60s)
+3. Proof blob is assembled: `u32_be(num_fields) || public_inputs || proof_bytes`
+4. Transaction is signed by the wallet and sent to Soroban
+5. `zk-hunt` contract forwards the blob to the verifier via cross-contract call
+6. Verifier accepts or rejects on-chain; game state advances if valid
 
 ---
 
@@ -104,15 +117,19 @@ All game state (phase, scores, positions, turns, commitments) lives in a Soroban
 
 Proves the prey moved from one hidden jungle position to an adjacent jungle tile.
 
-**Public inputs:** `old_commitment`, `new_commitment`, `map_id`
-**Private inputs:** `old_x`, `old_y`, `old_nonce`, `new_x`, `new_y`, `new_nonce`
+| | |
+|--|--|
+| **Public inputs** | `old_commitment`, `new_commitment`, `map_id` |
+| **Private inputs** | `old_x`, `old_y`, `old_nonce`, `new_x`, `new_y`, `new_nonce` |
 
 ### `search_response`
 
-Proves the prey is not at any of the searched tiles (batch of up to 5).
+Proves the prey is **not** at any of the searched tiles (batch of up to 9 — supports full 8-directional power search).
 
-**Public inputs:** `commitment`, `searched_x[5]`, `searched_y[5]`
-**Private inputs:** `my_x`, `my_y`, `my_nonce`
+| | |
+|--|--|
+| **Public inputs** | `commitment`, `searched_x[9]`, `searched_y[9]` |
+| **Private inputs** | `my_x`, `my_y`, `my_nonce` |
 
 ### `commitment`
 
@@ -120,29 +137,18 @@ Client-side only. Computes `Poseidon2(x, y, nonce)` when the prey first enters j
 
 ---
 
-## Architecture
+## Tech Stack
 
-```
-ultrahonk-soroban-contract   (ZK verifier, pre-compiled WASM)
-        ^
-        |  cross-contract call
-        |
-  zk-hunt contract           (game state machine)
-        ^
-        |  Soroban transactions
-        |
-  React frontend              (proof generation + wallet + UI)
-        |
-   @aztec/bb.js               (UltraHonk prover in-browser)
-```
-
-### Proof Flow
-
-1. Player triggers an action (enter jungle, move in jungle, respond to search)
-2. Frontend calls `NoirService.generateProof()` — loads circuit WASM, generates witness, runs UltraHonk prover
-3. Proof blob is assembled: `u32_be(num_fields) || public_inputs || proof_bytes`
-4. Transaction is sent to Soroban; contract forwards blob to the verifier via cross-contract call
-5. Verifier validates on-chain; game state advances if valid
+| Layer | Technology |
+|-------|-----------|
+| ZK Circuits | Noir `v1.0.0-beta.9` |
+| ZK Prover | Barretenberg / UltraHonk `v0.87.0` |
+| On-chain Verifier | `ultrahonk-soroban-contract` (pre-compiled WASM) |
+| Smart Contracts | Rust / Soroban SDK `23.1.0` |
+| Blockchain | Stellar (local or testnet) |
+| Frontend | React 19 + TypeScript + Vite |
+| 3D Rendering | React Three Fiber + Drei |
+| Wallet | Freighter via `@creit.tech/stellar-wallets-kit` |
 
 ---
 
@@ -150,35 +156,39 @@ ultrahonk-soroban-contract   (ZK verifier, pre-compiled WASM)
 
 ### Prerequisites
 
-- [Rust](https://rustup.rs/) with `wasm32v1-none` target:
-  ```bash
-  rustup target add wasm32v1-none
-  ```
-- [Stellar CLI](https://developers.stellar.org/docs/tools/cli)
-- [Bun](https://bun.sh/)
-- Docker (for the local Stellar container)
+| Tool | Version | Install |
+|------|---------|---------|
+| Rust + wasm target | stable | `rustup target add wasm32v1-none` |
+| Stellar CLI | latest | [developers.stellar.org/docs/tools/cli](https://developers.stellar.org/docs/tools/cli) |
+| Docker | any | [docker.com](https://www.docker.com/) |
+| Bun | latest | [bun.sh](https://bun.sh/) |
+| nargo | `1.0.0-beta.9` | `noirup -v 1.0.0-beta.9` |
+| bb | `0.87.0` | `bbup -v 0.87.0` |
+
+> **nargo and bb versions must match exactly** — they must align with the `@noir-lang/noir_js` and `@aztec/bb.js` versions used by the frontend.
 
 ### Deploy
 
 ```bash
-# 1. Start the local Stellar network (wait ~30s) (need docker running)
+# 1. Start the local Stellar network (needs Docker running, wait ~30s)
 stellar container start local --limits unlimited
 
 # 2. Install JS dependencies
 npm install
 
 # 3. Run the full deploy pipeline
+#    (compiles circuits, deploys contracts, sets VKs, updates .env)
 ./deploy.sh
 
 # 4. Start the dev server
 bun run dev
 ```
 
-`deploy.sh` handles: funding accounts, deploying the UltraHonk verifier, deploying the game contract, and writing contract IDs to `.env`.
+`deploy.sh` handles everything end-to-end: funding the deployer account, compiling Noir circuits, generating verification keys, deploying the UltraHonk verifier, building and deploying the game contract, uploading VKs on-chain, generating TypeScript bindings, and writing contract IDs to `.env`.
 
-### Configure Freighter Wallet
+### Configure Freighter
 
-Add a custom network in Freighter with these settings:
+Add a custom network in the Freighter browser extension:
 
 | Field | Value |
 |-------|-------|
@@ -188,38 +198,49 @@ Add a custom network in Freighter with these settings:
 | Network Passphrase | `Standalone Network ; February 2017` |
 | Friendbot URL | `http://localhost:8000/friendbot` |
 
-Enable **"Allow connecting to non-HTTPS networks"** in Freighter settings.
+Enable **"Allow connecting to non-HTTPS networks"** in Freighter → Settings.
 
-### Individual Build Commands
+### Individual Commands
 
 ```bash
-make build-zk-hunt           # Build the game contract (WASM)
+# Contract
+make build-zk-hunt           # Build game contract WASM
 make deploy-ultrahonk        # Deploy the ZK verifier
-make deploy-zk-hunt          # Deploy the game contract
-make update-env              # Write contract IDs to .env
+make deploy-zk-hunt          # Build + deploy the game contract
+make update-env              # Write deployed contract IDs to .env
 make clean                   # Remove build artifacts and deploy state
+
+# Circuits (if you modify .nr files)
+cd circuits/jungle_move
+nargo compile
+bb write_vk --oracle_hash keccak --scheme ultra_honk --output_format fields \
+  -b target/jungle_move.json -o target/vk_fields
+cp target/vk_fields/vk_fields.json ../public/circuits/jungle_move_vk.json
+
+cd circuits/search_response
+nargo compile
+bb write_vk --oracle_hash keccak --scheme ultra_honk --output_format fields \
+  -b target/search_response.json -o target/vk_fields
+cp target/vk_fields/vk_fields.json ../public/circuits/search_response_vk.json
 ```
 
-### Recompile Circuits (optional)
-
-```bash
-cd circuits/jungle_move && nargo compile
-bb write_vk --oracle_hash keccak -b target/jungle_move.json -o target/vk
-
-cd circuits/search_response && nargo compile
-bb write_vk --oracle_hash keccak -b target/search_response.json -o target/vk
-```
-
-Copy output files to `public/circuits/` for the frontend to load.
+After recompiling circuits, redeploy the contract and call `set_vks` to upload the new verification keys (handled automatically by `./deploy.sh`).
 
 ---
 
 ## How to Play
 
-1. Connect your Freighter wallet
-2. Player 1 clicks **Create Game** — shares the session ID with the opponent
-3. Player 2 enters the session ID and clicks **Join**
+1. Connect your Freighter wallet (on the `LOCAL` network)
+2. **Player 1** clicks **Create Game** — shares the session ID with the opponent
+3. **Player 2** enters the session ID and clicks **Join**
 4. The game begins: Hunter moves first
-5. Prey enters jungle to go hidden — a ZK proof is generated automatically
-6. Hunter searches tiles to find the prey; prey responds with a ZK proof they weren't there
-7. Rounds continue with swapped roles; highest score wins
+5. Prey enters jungle to go hidden — a ZK proof is generated automatically (~30–60s)
+6. Hunter searches tiles; prey auto-responds with a ZK proof they weren't found
+7. Roles swap each round — highest score after 2 rounds wins
+8. Click **HOW TO PLAY** in the game screen for a full rules reference
+
+---
+
+## Inspiration
+
+Phantom Chase is directly inspired by **[ZK Hunt](https://0xparc.org/blog/zk-hunt)**, an on-chain game built by the [0xPARC](https://0xparc.org) team exploring cryptographic fog-of-war. Their work demonstrated how ZK proofs can give players provable privacy in an otherwise transparent public ledger — a concept we brought to the Stellar ecosystem with Noir circuits and UltraHonk proofs.
