@@ -12,19 +12,38 @@ interface CharacterModelProps {
 }
 
 // dron.glb: bbox ~2.82 x 0.74 x 2.16, centered near origin
-const DRONE_SCALE = 0.5;
+const DRONE_SCALE = 0.8;
 
 // mouse.glb: bbox ~0.89 x 4.92 x 1.17, skinned mesh
 const MOUSE_SCALE = 0.3;
 
-const DroneModel: React.FC<{ ghost: boolean }> = ({ ghost }) => {
-  const { scene, animations } = useGLTF('/3d/dron.glb');
-  const cloned = useMemo(() => SkeletonUtils.clone(scene), [scene]);
+export const DroneModel: React.FC<{ ghost: boolean }> = ({ ghost }) => {
+  const { scene, animations } = useGLTF('/3d/drone_2.glb');
+  const cloned = useMemo(() => {
+    const c = SkeletonUtils.clone(scene);
+    c.traverse((child) => {
+      if (!(child as THREE.Mesh).isMesh) return;
+      const mesh = child as THREE.Mesh;
+      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      const clonedMats = mats.map((m) => {
+        const cm = m.clone();
+        if (cm instanceof THREE.MeshStandardMaterial) {
+          cm.color.set('#8c918c');
+          cm.metalness = 0.5;
+          cm.roughness = 0.3;
+        }
+        cm.needsUpdate = true;
+        return cm;
+      });
+      mesh.material = Array.isArray(mesh.material) ? clonedMats : clonedMats[0];
+    });
+    return c;
+  }, [scene]);
   const groupRef = useRef<THREE.Group>(null);
   const { actions } = useAnimations(animations, groupRef);
 
   useEffect(() => {
-    const action = actions['hover'] || Object.values(actions)[0];
+    const action = actions['Vole stationnaire'] || Object.values(actions)[0];
     if (action) {
       action.reset().play();
       action.setLoop(THREE.LoopRepeat, Infinity);
@@ -54,20 +73,22 @@ const DroneModel: React.FC<{ ghost: boolean }> = ({ ghost }) => {
   );
 };
 
-const MouseModel: React.FC<{ ghost: boolean }> = ({ ghost }) => {
+export const MouseModel: React.FC<{ ghost: boolean; animationName?: string }> = ({ ghost, animationName }) => {
   const { scene, animations } = useGLTF('/3d/mouse.glb');
   const cloned = useMemo(() => SkeletonUtils.clone(scene), [scene]);
   const groupRef = useRef<THREE.Group>(null);
   const { actions } = useAnimations(animations, groupRef);
 
   useEffect(() => {
-    const action = actions['rig|idol animtion'] || Object.values(actions)[0];
+    const action = (animationName ? actions[animationName] : null)
+      ?? actions['rig|idol animtion']
+      ?? Object.values(actions)[0];
     if (action) {
       action.reset().play();
       action.setLoop(THREE.LoopRepeat, Infinity);
     }
     return () => { action?.stop(); };
-  }, [actions]);
+  }, [actions, animationName]);
 
   useEffect(() => {
     cloned.traverse((child) => {
@@ -108,7 +129,7 @@ export const CharacterModel: React.FC<CharacterModelProps> = ({
   const prevTarget = useRef<[number, number]>(position);
 
   const color = type === 'hunter' ? '#ff6961' : '#64d2ff';
-  const yBase = type === 'hunter' ? 1.2 : 0.2;
+  const yBase = type === 'hunter' ? 1.4 : 0.2;
 
   const isPrey = type === 'prey';
 
@@ -163,5 +184,5 @@ export const CharacterModel: React.FC<CharacterModelProps> = ({
   );
 };
 
-useGLTF.preload('/3d/dron.glb');
+useGLTF.preload('/3d/drone_2.glb');
 useGLTF.preload('/3d/mouse.glb');

@@ -100,18 +100,19 @@ export const GameLobby: React.FC<GameLobbyProps> = ({ onGameStart }) => {
           padding: '20px',
         }}
       >
-        {/* Title */}
-        <h1
+        {/* Logo */}
+        <img
+          src="/logo.png"
+          alt="Phantom Chase"
           style={{
-            fontSize: '36px',
-            fontWeight: 700,
-            letterSpacing: '-0.03em',
-            margin: 0,
-            color: 'var(--text-primary)',
+            maxWidth: '500px',
+            width: '100%',
+            height: 'auto',
+            filter: 'drop-shadow(0 4px 24px rgba(0,0,0,0.6))',
+            userSelect: 'none',
+            pointerEvents: 'none',
           }}
-        >
-          Phantom Chase
-        </h1>
+        />
 
         {/* Unified card */}
         <GlassPanel
