@@ -31,8 +31,8 @@ export const SceneryGrass: React.FC = () => {
     return Array.from({ length: 18 }, (_, i) => {
       // Inner ring closer to the board: radius 4.5–9
       const angle = (i / 18) * Math.PI * 2 + seededRandom(i * 23) * 0.7;
-      const radius = 4.5 + seededRandom(i * 41) * 4.5;
-      const scale = 0.45 + seededRandom(i * 19) * 0.45;
+      const radius = 8 + seededRandom(i * 41) * 4.5;
+      const scale = 0.4 + seededRandom(i * 19) * 0.45;
       const rotY = seededRandom(i * 11) * Math.PI * 2;
       const cloned = SkeletonUtils.clone(scene);
       fixMaterials(cloned);

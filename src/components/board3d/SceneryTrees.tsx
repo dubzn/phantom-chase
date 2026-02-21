@@ -8,19 +8,39 @@ function seededRandom(seed: number) {
   return x - Math.floor(x);
 }
 
-function fixMaterials(obj: THREE.Object3D) {
+// tree_animate.glb material names: Bark (Object_4), Leaf (mesh_1), Branch (mesh_1_1)
+const LEAF_COLORS = ['#2d6e2d', '#357a2f', '#3a8033', '#2a5e28', '#4a8c3a'];
+
+function fixMaterials(obj: THREE.Object3D, seed: number) {
   obj.traverse((child) => {
-    if ((child as THREE.Mesh).isMesh) {
-      const mesh = child as THREE.Mesh;
-      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-      mats.forEach((mat) => {
+    if (!(child as THREE.Mesh).isMesh) return;
+    const mesh = child as THREE.Mesh;
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+
+    mats.forEach((mat) => {
+      const matName = mat.name ?? '';
+      mat.side = THREE.DoubleSide;
+      mat.depthWrite = true;
+      mat.needsUpdate = true;
+
+      if (!(mat instanceof THREE.MeshStandardMaterial)) return;
+
+      if (matName === 'Bark') {
+        mat.color.set('#5c3d1e');
+        mat.roughness = 0.95;
+        mat.metalness = 0;
+      } else if (matName === 'Branch') {
+        mat.color.set('#4a3018');
+        mat.roughness = 0.9;
+        mat.metalness = 0;
+      } else if (matName === 'Leaf') {
+        mat.color.set(LEAF_COLORS[seed % LEAF_COLORS.length]);
+        mat.roughness = 0.8;
+        mat.metalness = 0;
+        mat.alphaTest = 0.4;
         mat.transparent = false;
-        mat.depthWrite = true;
-        mat.alphaTest = 0.5;
-        mat.side = THREE.DoubleSide;
-        mat.needsUpdate = true;
-      });
-    }
+      }
+    });
   });
 }
 
@@ -30,11 +50,11 @@ export const SceneryTrees: React.FC = () => {
   const trees = useMemo(() => {
     return Array.from({ length: 20 }, (_, i) => {
       const angle = (i / 20) * Math.PI * 2 + seededRandom(i * 17) * 0.5;
-      const radius = 7.5 + seededRandom(i * 31) * 5;
-      const scale = 0.4 + seededRandom(i * 13) * 0.1;
+      const radius = 32 + seededRandom(i * 31) * 5;
+      const scale = 0.15 + seededRandom(i * 13) * 0.02;
       const rotY = seededRandom(i * 7) * Math.PI * 2;
       const cloned = SkeletonUtils.clone(scene);
-      fixMaterials(cloned);
+      fixMaterials(cloned, i);
       return {
         cloned,
         x: 3.5 + Math.cos(angle) * radius,
