@@ -63,16 +63,16 @@ function seededRandom(seed: number) {
   return x - Math.floor(x);
 }
 
+// Sunset sun — low on the horizon, warm orange, subtle flicker
 const SunLight: React.FC = () => {
   const ref = useRef<THREE.DirectionalLight>(null);
   const t = useRef(0);
   useFrame((_, d) => {
     if (!ref.current) return;
     t.current += d;
-    // Subtle variation (~clouds): 0.95 to 1.25
-    ref.current.intensity = 1.1 + Math.sin(t.current * 0.25) * 0.15;
+    ref.current.intensity = 1.4 + Math.sin(t.current * 0.18) * 0.12;
   });
-  return <directionalLight ref={ref} position={[15, 8, -10]} intensity={1.1} color="#fff5cc" />;
+  return <directionalLight ref={ref} position={[8, 1.5, -6]} intensity={1.4} color="#ff7230" castShadow={false} />;
 };
 
 export const BoardScene: React.FC<BoardSceneProps> = ({
@@ -150,49 +150,51 @@ export const BoardScene: React.FC<BoardSceneProps> = ({
 
   return (
     <>
-      {/* Sky */}
+      {/* Sunset sky — sun near horizon, high rayleigh for orange/red scattering */}
       <Sky
         distance={450}
-        sunPosition={[15, 8, -10]}
-        inclination={0.45}
-        azimuth={0.25}
-        rayleigh={2}
-        turbidity={8}
+        sunPosition={[2, 0.1, -3]}
+        inclination={0.498}
+        azimuth={0.3}
+        rayleigh={4}
+        turbidity={15}
+        mieCoefficient={0.005}
+        mieDirectionalG={0.85}
       />
 
       {/* Lighting */}
-      {/* Ambient raised for daytime sky */}
-      <ambientLight intensity={0.4} />
+      {/* Warm ambient — bounced sunset light */}
+      <ambientLight intensity={0.5} color="#ffb07a" />
 
-      {/* Main key light — sun direction, animated */}
+      {/* Main key light — low sun, warm orange */}
       <SunLight />
 
-      {/* Rim / fill light — cool blue from back-left, reduced */}
+      {/* Fill light — cool purple from opposite sky (dusk shadow side) */}
       <directionalLight
-        position={[-6, 7, -9]}
-        intensity={0.3}
-        color="#4488cc"
+        position={[-5, 4, 6]}
+        intensity={0.25}
+        color="#7060c0"
       />
 
-      {/* Hemisphere — sky cool, ground earthy */}
+      {/* Hemisphere — orange/pink sky, deep purple-brown ground */}
       <hemisphereLight
-        color="#c8e8ff"
-        groundColor="#8b7355"
-        intensity={0.35}
+        color="#ff8844"
+        groundColor="#3d2050"
+        intensity={0.5}
       />
 
-      {/* Board center underglow — subtle blue pooling on the surface */}
+      {/* Board center glow — warm amber pooling */}
       <pointLight
         position={[3.5, 0.3, 3.5]}
-        intensity={0.6}
-        color="#0a2060"
+        intensity={0.8}
+        color="#ff6020"
         distance={7}
         decay={2}
       />
 
-      {/* Corner accent lights for depth */}
-      <pointLight position={[0, 1.5, 0]} intensity={0.25} color="#1a3a70" distance={5} decay={2} />
-      <pointLight position={[7, 1.5, 7]} intensity={0.25} color="#1a3a70" distance={5} decay={2} />
+      {/* Corner accent lights — warm sunset */}
+      <pointLight position={[0, 1.5, 0]} intensity={0.3} color="#ff7030" distance={5} decay={2} />
+      <pointLight position={[7, 1.5, 7]} intensity={0.3} color="#ff7030" distance={5} decay={2} />
 
       {/* Ground plane */}
       <GrassGround />
@@ -267,8 +269,8 @@ export const BoardScene: React.FC<BoardSceneProps> = ({
         />
       )}
 
-      {/* Atmospheric fog — sky blue */}
-      <fog attach="fog" args={['#c4e0f5', 22, 50]} />
+      {/* Atmospheric fog — warm sunset haze */}
+      <fog attach="fog" args={['#ff9966', 20, 55]} />
     </>
   );
 };
