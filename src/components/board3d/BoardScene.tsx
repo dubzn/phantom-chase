@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Sky, useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
@@ -63,29 +63,10 @@ function seededRandom(seed: number) {
   return x - Math.floor(x);
 }
 
-// Stable target object for the directional light — lives outside the component
-const sunTarget = new THREE.Object3D();
-sunTarget.position.set(3.5, 0, 3.5);
-
 // Golden hour sun — mid-height, warm golden, subtle flicker
 const SunLight: React.FC = () => {
   const ref = useRef<THREE.DirectionalLight>(null);
   const t = useRef(0);
-
-  useEffect(() => {
-    const light = ref.current;
-    if (!light) return;
-    light.target = sunTarget;
-    light.shadow.mapSize.set(1024, 1024);
-    light.shadow.camera.near = 0.5;
-    light.shadow.camera.far = 35;
-    light.shadow.camera.left = -9;
-    light.shadow.camera.right = 9;
-    light.shadow.camera.top = 9;
-    light.shadow.camera.bottom = -9;
-    light.shadow.bias = -0.001;
-    light.shadow.camera.updateProjectionMatrix();
-  }, []);
 
   useFrame((_, d) => {
     if (!ref.current) return;
@@ -94,10 +75,22 @@ const SunLight: React.FC = () => {
   });
 
   return (
-    <>
-      <directionalLight ref={ref} position={[10, 5, -8]} intensity={1.3} color="#ffd090" castShadow />
-      <primitive object={sunTarget} />
-    </>
+    <directionalLight
+      ref={ref}
+      position={[10, 5, -8]}
+      intensity={1.3}
+      color="#ffd090"
+      castShadow
+      shadow-mapSize-width={1024}
+      shadow-mapSize-height={1024}
+      shadow-camera-near={0.5}
+      shadow-camera-far={50}
+      shadow-camera-left={-15}
+      shadow-camera-right={15}
+      shadow-camera-top={15}
+      shadow-camera-bottom={-15}
+      shadow-bias={-0.001}
+    />
   );
 };
 
