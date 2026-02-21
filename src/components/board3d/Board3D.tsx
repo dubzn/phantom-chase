@@ -33,9 +33,9 @@ export const Board3D: React.FC<Board3DProps> = (props) => {
       <Canvas
         camera={{
           position: [3.5, 9, 9],
-          fov: 50,
+          fov: 55,
           near: 0.1,
-          far: 50,
+          far: 500,
         }}
         style={{ background: 'transparent' }}
         gl={{ antialias: true, alpha: true }}
@@ -47,13 +47,13 @@ export const Board3D: React.FC<Board3DProps> = (props) => {
           target={[3.5, 0.5, 3.5]}
           enablePan={false}
           enableZoom
-          minDistance={5}
-          maxDistance={16}
-          minPolarAngle={Math.PI / 8}
-          maxPolarAngle={Math.PI / 3}
-          minAzimuthAngle={-Math.PI / 4}
-          maxAzimuthAngle={Math.PI / 4}
+          minDistance={4}
+          maxDistance={22}
+          minPolarAngle={Math.PI / 12}
+          maxPolarAngle={Math.PI / 2.2}
           zoomSpeed={0.8}
+          enableDamping
+          dampingFactor={0.08}
         />
       </Canvas>
     </div>

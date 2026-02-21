@@ -1,11 +1,47 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef } from 'react';
+import { useFrame } from '@react-three/fiber';
+import { Sky, useGLTF } from '@react-three/drei';
+import * as THREE from 'three';
 import { Tile3D } from './Tile3D';
 import { CharacterModel } from './CharacterModel';
 import { TileEffects } from './TileEffects';
 import { QuestionMark3D } from './QuestionMark3D';
 import { BushModel } from './BushModel';
-import { BoardBackground } from './BoardBackground';
+import { SceneryTrees } from './SceneryTrees';
+import { SceneryGrass } from './SceneryGrass';
 import { GRID_SIZE } from '../../services/GameService';
+
+const GrassGround: React.FC = () => {
+  const { scene } = useGLTF('/3d/surface.glb');
+
+  // Extract the color map from the first mesh in the surface pack (grass type)
+  const texture = useMemo(() => {
+    let tex: THREE.Texture | null = null;
+    scene.traverse((child) => {
+      if (tex) return;
+      if ((child as THREE.Mesh).isMesh) {
+        const mat = ((child as THREE.Mesh).material) as THREE.MeshStandardMaterial;
+        const source = Array.isArray(mat) ? mat[0] : mat;
+        if ((source as THREE.MeshStandardMaterial).map) {
+          tex = (source as THREE.MeshStandardMaterial).map!.clone();
+          tex.wrapS = THREE.RepeatWrapping;
+          tex.wrapT = THREE.RepeatWrapping;
+          tex.repeat.set(10, 10);
+          tex.needsUpdate = true;
+        }
+      }
+    });
+    return tex;
+  }, [scene]);
+
+  return (
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[3.5, -0.11, 3.5]}>
+      <planeGeometry args={[80, 80]} />
+      <meshStandardMaterial map={texture ?? undefined} color={texture ? '#ffffff' : '#4a7c3f'} roughness={0.9} metalness={0} />
+    </mesh>
+  );
+};
+useGLTF.preload('/3d/surface.glb');
 
 interface BoardSceneProps {
   map: number[];
@@ -26,6 +62,18 @@ function seededRandom(seed: number) {
   const x = Math.sin(seed * 127.1 + 311.7) * 43758.5453;
   return x - Math.floor(x);
 }
+
+const SunLight: React.FC = () => {
+  const ref = useRef<THREE.DirectionalLight>(null);
+  const t = useRef(0);
+  useFrame((_, d) => {
+    if (!ref.current) return;
+    t.current += d;
+    // Subtle variation (~clouds): 0.95 to 1.25
+    ref.current.intensity = 1.1 + Math.sin(t.current * 0.25) * 0.15;
+  });
+  return <directionalLight ref={ref} position={[15, 8, -10]} intensity={1.1} color="#fff5cc" />;
+};
 
 export const BoardScene: React.FC<BoardSceneProps> = ({
   map,
@@ -102,28 +150,34 @@ export const BoardScene: React.FC<BoardSceneProps> = ({
 
   return (
     <>
-      {/* Lighting */}
-      {/* Low ambient so shadows have contrast */}
-      <ambientLight intensity={0.25} />
-
-      {/* Main key light — warm, from front-right above */}
-      <directionalLight
-        position={[8, 14, 6]}
-        intensity={1.2}
-        color="#fff8ee"
+      {/* Sky */}
+      <Sky
+        distance={450}
+        sunPosition={[15, 8, -10]}
+        inclination={0.45}
+        azimuth={0.25}
+        rayleigh={2}
+        turbidity={8}
       />
 
-      {/* Rim / fill light — cool blue from back-left */}
+      {/* Lighting */}
+      {/* Ambient raised for daytime sky */}
+      <ambientLight intensity={0.4} />
+
+      {/* Main key light — sun direction, animated */}
+      <SunLight />
+
+      {/* Rim / fill light — cool blue from back-left, reduced */}
       <directionalLight
         position={[-6, 7, -9]}
-        intensity={0.45}
+        intensity={0.3}
         color="#4488cc"
       />
 
-      {/* Hemisphere — sky cool, ground dark */}
+      {/* Hemisphere — sky cool, ground earthy */}
       <hemisphereLight
         color="#c8e8ff"
-        groundColor="#050510"
+        groundColor="#8b7355"
         intensity={0.35}
       />
 
@@ -140,8 +194,14 @@ export const BoardScene: React.FC<BoardSceneProps> = ({
       <pointLight position={[0, 1.5, 0]} intensity={0.25} color="#1a3a70" distance={5} decay={2} />
       <pointLight position={[7, 1.5, 7]} intensity={0.25} color="#1a3a70" distance={5} decay={2} />
 
-      {/* Dynamic background */}
-      <BoardBackground />
+      {/* Ground plane */}
+      <GrassGround />
+
+      {/* Grass/flower decorations near the board */}
+      <SceneryGrass />
+
+      {/* Scenery trees around the board */}
+      <SceneryTrees />
 
       {/* Board base platform */}
       <mesh position={[3.5, -0.05, 3.5]}>
@@ -207,8 +267,8 @@ export const BoardScene: React.FC<BoardSceneProps> = ({
         />
       )}
 
-      {/* Fog */}
-      <fog attach="fog" args={['#000000', 14, 24]} />
+      {/* Atmospheric fog — sky blue */}
+      <fog attach="fog" args={['#c4e0f5', 22, 50]} />
     </>
   );
 };

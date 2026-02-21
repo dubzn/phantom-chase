@@ -108,8 +108,8 @@ export const CharacterModel: React.FC<CharacterModelProps> = ({
 
   const isPrey = type === 'prey';
 
-  // Detect position change and compute target facing angle (prey only)
-  if (isPrey && (position[0] !== prevTarget.current[0] || position[1] !== prevTarget.current[1])) {
+  // Detect position change and compute target facing angle (both hunter and prey)
+  if (position[0] !== prevTarget.current[0] || position[1] !== prevTarget.current[1]) {
     const dx = position[0] - prevTarget.current[0];
     const dz = position[1] - prevTarget.current[1];
     targetRotation.current = Math.atan2(dx, dz);
@@ -120,15 +120,13 @@ export const CharacterModel: React.FC<CharacterModelProps> = ({
     if (!groupRef.current) return;
     timeRef.current += delta;
 
-    // Smoothly rotate towards target direction (prey only)
-    if (isPrey) {
-      let angleDiff = targetRotation.current - currentRotation.current;
-      // Normalize to [-PI, PI] for shortest path
-      while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
-      while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
-      currentRotation.current += angleDiff * Math.min(delta * 3, 1);
-      groupRef.current.rotation.y = currentRotation.current;
-    }
+    // Smoothly rotate towards target direction
+    let angleDiff = targetRotation.current - currentRotation.current;
+    // Normalize to [-PI, PI] for shortest path
+    while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+    while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+    currentRotation.current += angleDiff * Math.min(delta * 3, 1);
+    groupRef.current.rotation.y = currentRotation.current;
 
     // Smooth position transition
     const target = new THREE.Vector3(position[0], 0, position[1]);
