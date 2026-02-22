@@ -14,6 +14,43 @@ Every move, every search, every evasion is settled on-chain via Soroban smart co
 
 ---
 
+
+## Local Deployment
+
+### Prerequisites
+
+| Tool | Version | Install |
+|------|---------|---------|
+| Rust + wasm target | stable | `rustup target add wasm32v1-none` |
+| Stellar CLI | latest | [developers.stellar.org/docs/tools/cli](https://developers.stellar.org/docs/tools/cli) |
+| Docker | any | [docker.com](https://www.docker.com/) |
+| Bun | latest | [bun.sh](https://bun.sh/) |
+| nargo | `1.0.0-beta.9` | `noirup -v 1.0.0-beta.9` |
+| bb | `0.87.0` | `bbup -v 0.87.0` |
+
+> **nargo and bb versions must match exactly** — they must align with the `@noir-lang/noir_js` and `@aztec/bb.js` versions used by the frontend.
+
+### Deploy
+
+```bash
+# 1. Start the local Stellar network (needs Docker running, wait ~30s)
+stellar container start local --limits unlimited
+
+# 2. Install JS dependencies
+npm install
+
+# 3. Run the full deploy pipeline
+#    (compiles circuits, deploys contracts, sets VKs, updates .env)
+./deploy.sh
+
+# 4. Start the dev server
+bun run dev
+```
+
+`deploy.sh` handles everything end-to-end: funding the deployer account, compiling Noir circuits, generating verification keys, deploying the UltraHonk verifier, building and deploying the game contract, uploading VKs on-chain, generating TypeScript bindings, and writing contract IDs to `.env`.
+
+---
+
 ## Game Mechanics
 
 ### Roles
@@ -32,17 +69,15 @@ An 8×8 grid with two terrain types:
 - **Plains** — fully visible. Position is public on-chain.
 - **Jungle** — dense cover. Prey hides here using ZK proofs.
 
-There are **20 hand-crafted maps** (central block, spirals, mazes, rivers, borders, diagonals, and more), randomly assigned per match.
-
 ### Turn Structure
 
 Each round runs up to **10 turns**. On each turn:
 
 | Phase | Action |
 |-------|--------|
-| `HunterTurn` | Hunter moves one tile, searches, uses Max Search, or fires EMP |
-| `PreyTurn` | Prey moves one tile — publicly on plains, privately in jungle |
-| `SearchPending` | Prey auto-generates a ZK proof they weren't at the searched tiles |
+| `Hunter Turn` | Hunter moves one tile, searches, uses Max Search, or fires EMP |
+| `Prey Turn` | Prey moves one tile — publicly on plains, privately in jungle |
+| `Search Pending` | Prey auto-generates a ZK proof they weren't at the searched tiles |
 
 ### Scoring
 
@@ -152,92 +187,15 @@ Client-side only. Computes `Poseidon2(x, y, nonce)` when the prey first enters j
 
 ---
 
-## Local Deployment
-
-### Prerequisites
-
-| Tool | Version | Install |
-|------|---------|---------|
-| Rust + wasm target | stable | `rustup target add wasm32v1-none` |
-| Stellar CLI | latest | [developers.stellar.org/docs/tools/cli](https://developers.stellar.org/docs/tools/cli) |
-| Docker | any | [docker.com](https://www.docker.com/) |
-| Bun | latest | [bun.sh](https://bun.sh/) |
-| nargo | `1.0.0-beta.9` | `noirup -v 1.0.0-beta.9` |
-| bb | `0.87.0` | `bbup -v 0.87.0` |
-
-> **nargo and bb versions must match exactly** — they must align with the `@noir-lang/noir_js` and `@aztec/bb.js` versions used by the frontend.
-
-### Deploy
-
-```bash
-# 1. Start the local Stellar network (needs Docker running, wait ~30s)
-stellar container start local --limits unlimited
-
-# 2. Install JS dependencies
-npm install
-
-# 3. Run the full deploy pipeline
-#    (compiles circuits, deploys contracts, sets VKs, updates .env)
-./deploy.sh
-
-# 4. Start the dev server
-bun run dev
-```
-
-`deploy.sh` handles everything end-to-end: funding the deployer account, compiling Noir circuits, generating verification keys, deploying the UltraHonk verifier, building and deploying the game contract, uploading VKs on-chain, generating TypeScript bindings, and writing contract IDs to `.env`.
-
-### Configure Freighter
-
-Add a custom network in the Freighter browser extension:
-
-| Field | Value |
-|-------|-------|
-| Name | `LOCAL` |
-| Horizon RPC URL | `http://localhost:8000` |
-| Soroban RPC URL | `http://localhost:8000/rpc` |
-| Network Passphrase | `Standalone Network ; February 2017` |
-| Friendbot URL | `http://localhost:8000/friendbot` |
-
-Enable **"Allow connecting to non-HTTPS networks"** in Freighter → Settings.
-
-### Individual Commands
-
-```bash
-# Contract
-make build-zk-hunt           # Build game contract WASM
-make deploy-ultrahonk        # Deploy the ZK verifier
-make deploy-zk-hunt          # Build + deploy the game contract
-make update-env              # Write deployed contract IDs to .env
-make clean                   # Remove build artifacts and deploy state
-
-# Circuits (if you modify .nr files)
-cd circuits/jungle_move
-nargo compile
-bb write_vk --oracle_hash keccak --scheme ultra_honk --output_format fields \
-  -b target/jungle_move.json -o target/vk_fields
-cp target/vk_fields/vk_fields.json ../public/circuits/jungle_move_vk.json
-
-cd circuits/search_response
-nargo compile
-bb write_vk --oracle_hash keccak --scheme ultra_honk --output_format fields \
-  -b target/search_response.json -o target/vk_fields
-cp target/vk_fields/vk_fields.json ../public/circuits/search_response_vk.json
-```
-
-After recompiling circuits, redeploy the contract and call `set_vks` to upload the new verification keys (handled automatically by `./deploy.sh`).
-
----
-
 ## How to Play
 
-1. Connect your Freighter wallet (on the `LOCAL` network)
-2. **Player 1** clicks **Create Game** — shares the session ID with the opponent
-3. **Player 2** enters the session ID and clicks **Join**
-4. The game begins: Hunter moves first
-5. Prey enters jungle to go hidden — a ZK proof is generated automatically (~30–60s)
-6. Hunter searches tiles; prey auto-responds with a ZK proof they weren't found
-7. Roles swap each round — highest score after 2 rounds wins
-8. Click **HOW TO PLAY** in the game screen for a full rules reference
+1. **Player 1** clicks **Create Game** — shares the session ID with the opponent
+2. **Player 2** enters the session ID and clicks **Join**
+3. The game begins: Hunter moves first
+4. Prey enters jungle to go hidden — a ZK proof is generated automatically (~30–60s)
+5. Hunter searches tiles; prey auto-responds with a ZK proof they weren't found
+6. Roles swap each round — highest score after 2 rounds wins
+7. Click **HOW TO PLAY** in the game screen for a full rules reference
 
 ---
 
