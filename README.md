@@ -22,6 +22,7 @@ Phantom Chase is a 1v1 asymmetric strategy game where one player hunts and the o
 
 Every move, every search, every evasion is settled on-chain via Soroban smart contracts on Stellar. No server, no trust — just math.
 
+[DEMO VIDEO](https://youtu.be/MgWWAY_yjDM)
 ---
 
 
