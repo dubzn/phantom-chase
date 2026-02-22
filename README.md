@@ -30,7 +30,7 @@ Every move, every search, every evasion is settled on-chain via Soroban smart co
 
 > **nargo and bb versions must match exactly** — they must align with the `@noir-lang/noir_js` and `@aztec/bb.js` versions used by the frontend.
 
-### Deploy
+### Local deploy
 
 ```bash
 # 1. Start the local Stellar network (needs Docker running, wait ~30s)
