@@ -1,11 +1,14 @@
+<div align="center">                                                                                                                                                                                             
+                                                                                                                                                                                                               
+# Phantom Chase                                                                                                                                                                                                  
+                                                                                                                                                                                                               
+</div>   
 
-<center>
-    <img width="1600" height="700" alt="zkgaming" src="https://github.com/user-attachments/assets/a7dab672-b6f4-4bce-b8c2-05a0d9296689" />
-    
-## Phantom Chase
-
-<img width="1600" height="700" alt="phph" src="https://github.com/user-attachments/assets/47517688-f932-4847-98f3-d08a4277710d" />
-</center>
+<div align="center">                                                                                                                                                                                             
+                                                                                                                                                                                                           
+<img width="1600" height="700" alt="phph" src="https://github.com/user-attachments/assets/47517688-f932-4847-98f3-d08a4277710d" />                                                                                                                                                                                                
+</div> 
+ 
 
 > A zero-knowledge hunter vs. prey game on the Stellar blockchain.
 
@@ -37,7 +40,7 @@ Every move, every search, every evasion is settled on-chain via Soroban smart co
 
 > **nargo and bb versions must match exactly** — they must align with the `@noir-lang/noir_js` and `@aztec/bb.js` versions used by the frontend.
 
-### Local deploy
+### Deploy
 
 ```bash
 # 1. Start the local Stellar network (needs Docker running, wait ~30s)
@@ -209,3 +212,8 @@ Client-side only. Computes `Poseidon2(x, y, nonce)` when the prey first enters j
 ## Inspiration
 
 Phantom Chase is directly inspired by **[ZK Hunt](https://0xparc.org/blog/zk-hunt)**, an on-chain game built by the [0xPARC](https://0xparc.org) team exploring cryptographic fog-of-war. Their work demonstrated how ZK proofs can give players provable privacy in an otherwise transparent public ledger — a concept we brought to the Stellar ecosystem with Noir circuits and UltraHonk proofs.
+<div align="center">                                                                                                                                                                                             
+                                                                                                                                      
+<img width="1600" height="700" alt="zkgaming" src="https://github.com/user-attachments/assets/a7dab672-b6f4-4bce-b8c2-05a0d9296689" />
+                                                                                                                                                                                                
+</div> 
