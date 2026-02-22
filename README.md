@@ -1,4 +1,11 @@
-# Phantom Chase
+
+<center>
+    <img width="1600" height="700" alt="zkgaming" src="https://github.com/user-attachments/assets/a7dab672-b6f4-4bce-b8c2-05a0d9296689" />
+    
+## Phantom Chase
+
+<img width="1600" height="700" alt="phph" src="https://github.com/user-attachments/assets/47517688-f932-4847-98f3-d08a4277710d" />
+</center>
 
 > A zero-knowledge hunter vs. prey game on the Stellar blockchain.
 
